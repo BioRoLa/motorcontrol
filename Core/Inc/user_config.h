@@ -184,6 +184,42 @@ extern "C" {
 #define MIN_HALL_CAL_SPEED     	0.0f
 #define MAX_HALL_CAL_SPEED     	10.0f
 
+#define NAME_HALL_CAL_KP        "HALL_CAL_KP"
+#define ADDR_HALL_CAL_KP        30
+#define CMD_HALL_CAL_KP         'K'
+#define MIN_HALL_CAL_KP         0.0f
+#define MAX_HALL_CAL_KP         1000.0f
+
+#define NAME_HALL_CAL_KI        "HALL_CAL_KI"
+#define ADDR_HALL_CAL_KI        31
+#define CMD_HALL_CAL_KI         'I'
+#define MIN_HALL_CAL_KI         0.0f
+#define MAX_HALL_CAL_KI         10.0f
+
+#define NAME_HALL_CAL_KD        "HALL_CAL_KD"
+#define ADDR_HALL_CAL_KD        32
+#define CMD_HALL_CAL_KD         'D'
+#define MIN_HALL_CAL_KD         0.0f
+#define MAX_HALL_CAL_KD         5.0f
+
+#define NAME_MOTOR_MODE_KP       "MOTOR_MODE_KP"
+#define ADDR_MOTOR_MODE_KP       33
+#define CMD_MOTOR_MODE_KP        'X'
+#define MIN_MOTOR_MODE_KP        0.0f
+#define MAX_MOTOR_MODE_KP        1000.0f
+
+#define NAME_MOTOR_MODE_KI       "MOTOR_MODE_KI"
+#define ADDR_MOTOR_MODE_KI       34
+#define CMD_MOTOR_MODE_KI        'Y'
+#define MIN_MOTOR_MODE_KI        0.0f
+#define MAX_MOTOR_MODE_KI        10.0f
+
+#define NAME_MOTOR_MODE_KD       "MOTOR_MODE_KD"
+#define ADDR_MOTOR_MODE_KD       35
+#define CMD_MOTOR_MODE_KD        'Z'
+#define MIN_MOTOR_MODE_KD        0.0f
+#define MAX_MOTOR_MODE_KD        5.0f
+
 
 #define I_BW                    __float_reg[ADDR_I_BW]	            // Current loop bandwidth
 #define I_MAX                   __float_reg[ADDR_I_MAX]             // Current limit
@@ -213,6 +249,12 @@ extern "C" {
 #define KD_MAX					__float_reg[ADDR_KD_MAX]			// Max velocity gain (N-m/rad/s)
 #define HALL_CAL_OFFSET         __float_reg[ADDR_HALL_CAL_OFFSET]
 #define HALL_CAL_SPEED          __float_reg[ADDR_HALL_CAL_SPEED]
+#define HALL_CAL_KP             __float_reg[ADDR_HALL_CAL_KP]
+#define HALL_CAL_KI             __float_reg[ADDR_HALL_CAL_KI]
+#define HALL_CAL_KD             __float_reg[ADDR_HALL_CAL_KD]
+#define MOTOR_MODE_KP           __float_reg[ADDR_MOTOR_MODE_KP]
+#define MOTOR_MODE_KI           __float_reg[ADDR_MOTOR_MODE_KI]
+#define MOTOR_MODE_KD           __float_reg[ADDR_MOTOR_MODE_KD]
 
 
 #define NAME_PHASE_ORDER        "PHASE_ORDER"	                    // Phase swapping during calibration
