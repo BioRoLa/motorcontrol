@@ -123,9 +123,9 @@
 				if (fsmstate->print_uart_msg){
 					printf("\r\nEntering Motor Mode\r\n");
 				}
-				controller.kp = MOTOR_MODE_KP;
-				controller.ki = MOTOR_MODE_KI;
-				controller.kd = MOTOR_MODE_KD;
+				controller.kp = isfinite(MOTOR_MODE_KP) ? MOTOR_MODE_KP : 5.0f;
+				controller.ki = isfinite(MOTOR_MODE_KI) ? MOTOR_MODE_KI : 0.0f;
+				controller.kd = isfinite(MOTOR_MODE_KD) ? MOTOR_MODE_KD : 1.0f;
 				enter_motor_mode();
 				break;
 			case ENCODER_CALIBRATE:
@@ -146,9 +146,9 @@
 				if (fsmstate->print_uart_msg){
 					printf("\r\nEntering Hall Calibration Mode\r\n");
 				}
-				controller.kp = HALL_CAL_KP;
-				controller.ki = HALL_CAL_KI;
-				controller.kd = HALL_CAL_KD;
+				controller.kp = isfinite(HALL_CAL_KP) ? HALL_CAL_KP : 50.0f;
+				controller.ki = isfinite(HALL_CAL_KI) ? HALL_CAL_KI : 0.0f;
+				controller.kd = isfinite(HALL_CAL_KD) ? HALL_CAL_KD : 1.5f;
 				enter_motor_mode();
 				break;
 

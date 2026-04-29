@@ -9,6 +9,7 @@
 #include "user_config.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 struct FloatRegConfig float_reg_config[FLOAT_REG_LENGTH];
 struct IntRegConfig int_reg_config[INT_REG_LENGTH];
@@ -240,6 +241,10 @@ char* float_reg_update_uart(char cmd, const char *c_data){
     static char response[100];
 	float f_data = atof(c_data);
 
+	if (!isfinite(f_data)){
+		return STR_INVALID_VALUE;
+	}
+
 	for (int i=0; i<FLOAT_REG_LENGTH; i++){
 		if (float_reg_config[i].cmd == cmd){
 			if ((float_reg_config[i].f_MIN > f_data) || (float_reg_config[i].f_MAX < f_data)){
@@ -270,6 +275,9 @@ char* float_reg_update_uart(char cmd, const char *c_data){
 int float_reg_update_can(int addr, float f_data){
 	if (addr < 0 || addr >= FLOAT_REG_LENGTH){
 		return CODE_INVALID_ADDR;
+	}
+	else if (!isfinite(f_data)){
+		return CODE_INVALID_VALUE;
 	}
 	else if (float_reg_config[addr].cmd == ' '){
 		return CODE_READ_ONLY;
