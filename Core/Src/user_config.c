@@ -9,6 +9,7 @@
 #include "user_config.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 struct FloatRegConfig float_reg_config[FLOAT_REG_LENGTH];
 struct IntRegConfig int_reg_config[INT_REG_LENGTH];
@@ -164,6 +165,36 @@ void user_config_initialize(void){
 	float_reg_config[ADDR_HALL_CAL_SPEED].f_MIN		= MIN_HALL_CAL_SPEED;
 	float_reg_config[ADDR_HALL_CAL_SPEED].f_MAX		= MAX_HALL_CAL_SPEED;
 
+	float_reg_config[ADDR_HALL_CAL_KP].name			= NAME_HALL_CAL_KP;
+	float_reg_config[ADDR_HALL_CAL_KP].cmd			= CMD_HALL_CAL_KP;
+	float_reg_config[ADDR_HALL_CAL_KP].f_MIN			= MIN_HALL_CAL_KP;
+	float_reg_config[ADDR_HALL_CAL_KP].f_MAX			= MAX_HALL_CAL_KP;
+
+	float_reg_config[ADDR_HALL_CAL_KI].name			= NAME_HALL_CAL_KI;
+	float_reg_config[ADDR_HALL_CAL_KI].cmd			= CMD_HALL_CAL_KI;
+	float_reg_config[ADDR_HALL_CAL_KI].f_MIN			= MIN_HALL_CAL_KI;
+	float_reg_config[ADDR_HALL_CAL_KI].f_MAX			= MAX_HALL_CAL_KI;
+
+	float_reg_config[ADDR_HALL_CAL_KD].name			= NAME_HALL_CAL_KD;
+	float_reg_config[ADDR_HALL_CAL_KD].cmd			= CMD_HALL_CAL_KD;
+	float_reg_config[ADDR_HALL_CAL_KD].f_MIN			= MIN_HALL_CAL_KD;
+	float_reg_config[ADDR_HALL_CAL_KD].f_MAX			= MAX_HALL_CAL_KD;
+
+	float_reg_config[ADDR_MOTOR_MODE_KP].name		= NAME_MOTOR_MODE_KP;
+	float_reg_config[ADDR_MOTOR_MODE_KP].cmd		= CMD_MOTOR_MODE_KP;
+	float_reg_config[ADDR_MOTOR_MODE_KP].f_MIN		= MIN_MOTOR_MODE_KP;
+	float_reg_config[ADDR_MOTOR_MODE_KP].f_MAX		= MAX_MOTOR_MODE_KP;
+
+	float_reg_config[ADDR_MOTOR_MODE_KI].name		= NAME_MOTOR_MODE_KI;
+	float_reg_config[ADDR_MOTOR_MODE_KI].cmd		= CMD_MOTOR_MODE_KI;
+	float_reg_config[ADDR_MOTOR_MODE_KI].f_MIN		= MIN_MOTOR_MODE_KI;
+	float_reg_config[ADDR_MOTOR_MODE_KI].f_MAX		= MAX_MOTOR_MODE_KI;
+
+	float_reg_config[ADDR_MOTOR_MODE_KD].name		= NAME_MOTOR_MODE_KD;
+	float_reg_config[ADDR_MOTOR_MODE_KD].cmd		= CMD_MOTOR_MODE_KD;
+	float_reg_config[ADDR_MOTOR_MODE_KD].f_MIN		= MIN_MOTOR_MODE_KD;
+	float_reg_config[ADDR_MOTOR_MODE_KD].f_MAX		= MAX_MOTOR_MODE_KD;
+
 	// initialize the int_reg_config array
 	int_reg_config[ADDR_PHASE_ORDER].name			= NAME_PHASE_ORDER;
 	int_reg_config[ADDR_PHASE_ORDER].cmd			= CMD_PHASE_ORDER;
@@ -210,6 +241,10 @@ char* float_reg_update_uart(char cmd, const char *c_data){
     static char response[100];
 	float f_data = atof(c_data);
 
+	if (!isfinite(f_data)){
+		return STR_INVALID_VALUE;
+	}
+
 	for (int i=0; i<FLOAT_REG_LENGTH; i++){
 		if (float_reg_config[i].cmd == cmd){
 			if ((float_reg_config[i].f_MIN > f_data) || (float_reg_config[i].f_MAX < f_data)){
@@ -240,6 +275,9 @@ char* float_reg_update_uart(char cmd, const char *c_data){
 int float_reg_update_can(int addr, float f_data){
 	if (addr < 0 || addr >= FLOAT_REG_LENGTH){
 		return CODE_INVALID_ADDR;
+	}
+	else if (!isfinite(f_data)){
+		return CODE_INVALID_VALUE;
 	}
 	else if (float_reg_config[addr].cmd == ' '){
 		return CODE_READ_ONLY;

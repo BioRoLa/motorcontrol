@@ -123,9 +123,9 @@
 				if (fsmstate->print_uart_msg){
 					printf("\r\nEntering Motor Mode\r\n");
 				}
-				controller.kp = 5.0f ;
-				controller.ki = 0.0f ;
-				controller.kd = 1.0f ;
+				controller.kp = MOTOR_MODE_KP;
+				controller.ki = MOTOR_MODE_KI;
+				controller.kd = MOTOR_MODE_KD;
 				enter_motor_mode();
 				break;
 			case ENCODER_CALIBRATE:
@@ -146,9 +146,9 @@
 				if (fsmstate->print_uart_msg){
 					printf("\r\nEntering Hall Calibration Mode\r\n");
 				}
-				controller.kp = 50.0f ;
-				controller.ki = 0.0f ;
-				controller.kd = 1.5f ;
+				controller.kp = HALL_CAL_KP;
+				controller.ki = HALL_CAL_KI;
+				controller.kd = HALL_CAL_KD;
 				enter_motor_mode();
 				break;
 
@@ -313,6 +313,9 @@
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "k", "Max Gain for Position (N-m/rad)",           "0.0", "1000.0", KP_MAX);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "i", "Max Integral Gain for Position (N-m*s/rad)","0.0", "10.0",   KI_MAX);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "d", "Max Gain for Velocity (N-m/rad/s)",         "0.0", "5.0",    KD_MAX);
+	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "X", "Motor Mode Default Kp (N-m/rad)",          "0.0", "1000.0", MOTOR_MODE_KP);
+	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "Y", "Motor Mode Default Ki (N-m*s/rad)",        "0.0", "10.0",   MOTOR_MODE_KI);
+	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "Z", "Motor Mode Default Kd (N-m/rad/s)",        "0.0", "5.0",    MOTOR_MODE_KD);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "f", "FW Current Limit (A)",                      "0.0", "33.0",   I_FW_MAX);
 //	    printf(" %-4s %-31s %-5s %-6s %.1f\n\r", "h", "Temp Cutoff (C) (0 = none)",                "0",   "150",    TEMP_MAX);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "c", "Continuous Current (A)",                    "0.0", "40.0",   I_MAX_CONT);
@@ -320,6 +323,9 @@
 		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "r", "Hall Calibration Direction",                "-1",  "1",      HALL_CAL_DIR);
 		printf(" %-4s %-31s %-5s %-6s %.1f\n\r", "e", "Hall Calibration offset",                   "0.0", "143.0",  HALL_CAL_OFFSET);
 		printf(" %-4s %-31s %-5s %-6s %.1f\n\r", "h", "Hall Calibration Speed",                    "0.0", "10.0",   HALL_CAL_SPEED);
+		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "K", "Hall Calibration Kp (N-m/rad)",            "0.0", "1000.0", HALL_CAL_KP);
+		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "I", "Hall Calibration Ki (N-m*s/rad)",          "0.0", "10.0",   HALL_CAL_KI);
+		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "D", "Hall Calibration Kd (N-m/rad/s)",          "0.0", "5.0",    HALL_CAL_KD);
 	    printf("\r\n CAN:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %-5i\n\r", "n", "CAN ID",                                    "0",   "127",    CAN_ID);
 	    printf(" %-4s %-31s %-5s %-6s %-5i\n\r", "m", "CAN TX ID",                                 "0",   "127",    CAN_MASTER);

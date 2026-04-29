@@ -180,6 +180,12 @@ int main(void)
   if(isnan(HALL_CAL_OFFSET) || MIN_HALL_CAL_OFFSET > HALL_CAL_OFFSET || MAX_HALL_CAL_OFFSET < HALL_CAL_OFFSET) {HALL_CAL_OFFSET = 0.0f;}
   if(isnan(HALL_CAL_SPEED)  || MIN_HALL_CAL_SPEED > HALL_CAL_SPEED   || MAX_HALL_CAL_SPEED < HALL_CAL_SPEED)   {HALL_CAL_SPEED = 0.25f;}
   if(						   MIN_CAN_ID > CAN_ID                   || MAX_CAN_ID < CAN_ID)                   {CAN_ID = 1;}
+  if(isnan(HALL_CAL_KP)     || MIN_HALL_CAL_KP > HALL_CAL_KP         || MAX_HALL_CAL_KP < HALL_CAL_KP)         {HALL_CAL_KP = 50.0f;}
+  if(isnan(HALL_CAL_KI)     || MIN_HALL_CAL_KI > HALL_CAL_KI         || MAX_HALL_CAL_KI < HALL_CAL_KI)         {HALL_CAL_KI = 0.0f;}
+  if(isnan(HALL_CAL_KD)     || MIN_HALL_CAL_KD > HALL_CAL_KD         || MAX_HALL_CAL_KD < HALL_CAL_KD)         {HALL_CAL_KD = 1.5f;}
+  if(isnan(MOTOR_MODE_KP)   || MIN_MOTOR_MODE_KP > MOTOR_MODE_KP     || MAX_MOTOR_MODE_KP < MOTOR_MODE_KP)     {MOTOR_MODE_KP = 5.0f;}
+  if(isnan(MOTOR_MODE_KI)   || MIN_MOTOR_MODE_KI > MOTOR_MODE_KI     || MAX_MOTOR_MODE_KI < MOTOR_MODE_KI)     {MOTOR_MODE_KI = 0.0f;}
+  if(isnan(MOTOR_MODE_KD)   || MIN_MOTOR_MODE_KD > MOTOR_MODE_KD     || MAX_MOTOR_MODE_KD < MOTOR_MODE_KD)     {MOTOR_MODE_KD = 1.0f;}
   if(                          MIN_CAN_MASTER > CAN_MASTER           || MAX_CAN_MASTER < CAN_MASTER)           {CAN_MASTER = 0;}
   if(                          MIN_CAN_TIMEOUT > CAN_TIMEOUT         || MAX_CAN_TIMEOUT < CAN_TIMEOUT)         {CAN_TIMEOUT = 0;}
   if(isnan(R_NOMINAL)       || MIN_R_NOMINAL > R_NOMINAL             || MAX_R_NOMINAL < R_NOMINAL)             {R_NOMINAL = 0.0f;}
