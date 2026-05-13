@@ -185,6 +185,12 @@ int main(void)
   if(isnan(HALL_CAL_KP)     || MIN_HALL_CAL_KP > HALL_CAL_KP         || MAX_HALL_CAL_KP < HALL_CAL_KP)         {HALL_CAL_KP = 50.0f;}
   if(isnan(HALL_CAL_KI)     || MIN_HALL_CAL_KI > HALL_CAL_KI         || MAX_HALL_CAL_KI < HALL_CAL_KI)         {HALL_CAL_KI = 0.0f;}
   if(isnan(HALL_CAL_KD)     || MIN_HALL_CAL_KD > HALL_CAL_KD         || MAX_HALL_CAL_KD < HALL_CAL_KD)         {HALL_CAL_KD = 1.5f;}
+  if(ABAD_CAL_DIR != 1 && ABAD_CAL_DIR != -1)                                                                             {ABAD_CAL_DIR = 1;}
+  if(isnan(ABAD_CAL_OFFSET) || MIN_ABAD_CAL_OFFSET > ABAD_CAL_OFFSET || MAX_ABAD_CAL_OFFSET < ABAD_CAL_OFFSET)          {ABAD_CAL_OFFSET = 0.0f;}
+  if(isnan(ABAD_CAL_SPEED)  || MIN_ABAD_CAL_SPEED > ABAD_CAL_SPEED   || MAX_ABAD_CAL_SPEED < ABAD_CAL_SPEED)            {ABAD_CAL_SPEED = 0.25f;}
+  if(isnan(ABAD_CAL_KP)     || MIN_ABAD_CAL_KP > ABAD_CAL_KP         || MAX_ABAD_CAL_KP < ABAD_CAL_KP)                  {ABAD_CAL_KP = 50.0f;}
+  if(isnan(ABAD_CAL_KI)     || MIN_ABAD_CAL_KI > ABAD_CAL_KI         || MAX_ABAD_CAL_KI < ABAD_CAL_KI)                  {ABAD_CAL_KI = 0.0f;}
+  if(isnan(ABAD_CAL_KD)     || MIN_ABAD_CAL_KD > ABAD_CAL_KD         || MAX_ABAD_CAL_KD < ABAD_CAL_KD)                  {ABAD_CAL_KD = 1.5f;}
   if(isnan(MOTOR_MODE_KP)   || MIN_MOTOR_MODE_KP > MOTOR_MODE_KP     || MAX_MOTOR_MODE_KP < MOTOR_MODE_KP)     {MOTOR_MODE_KP = 5.0f;}
   if(isnan(MOTOR_MODE_KI)   || MIN_MOTOR_MODE_KI > MOTOR_MODE_KI     || MAX_MOTOR_MODE_KI < MOTOR_MODE_KI)     {MOTOR_MODE_KI = 0.0f;}
   if(isnan(MOTOR_MODE_KD)   || MIN_MOTOR_MODE_KD > MOTOR_MODE_KD     || MAX_MOTOR_MODE_KD < MOTOR_MODE_KD)     {MOTOR_MODE_KD = 1.0f;}
@@ -193,6 +199,7 @@ int main(void)
   if(isnan(R_NOMINAL)       || MIN_R_NOMINAL > R_NOMINAL             || MAX_R_NOMINAL < R_NOMINAL)             {R_NOMINAL = 0.0f;}
   if(isnan(TEMP_MAX)        || MIN_TEMP_MAX > TEMP_MAX               || MAX_TEMP_MAX < TEMP_MAX)               {TEMP_MAX = 125.0f;}
   if(isnan(PPAIRS)          || MIN_PPAIRS > PPAIRS                   || MAX_PPAIRS < PPAIRS)                   {PPAIRS = 21.0f;}
+  if(                          MIN_MOTOR_POSITION > MOTOR_POSITION   || MAX_MOTOR_POSITION < MOTOR_POSITION)   {MOTOR_POSITION = MOTOR_POS_HIP;}
 
   user_config_initialize();
 
@@ -243,9 +250,6 @@ int main(void)
   abad_cal.active_sensor = 2; // 0=A, 1=B, 2=either
   abad_cal.current_angle_estimate = 0;
   abad_cal.abad_cal_state = CODE_ABAD_UNCALIBRATED;
-
-  /* Motor position setup - configurable per deployment */
-  MOTOR_POSITION = MOTOR_POS_HIP;  // Default: can be changed to MOTOR_POS_ABAD_FL_RR or MOTOR_POS_ABAD_FR_RL
 
   /* commutation encoder setup */
   comm_encoder.m_zero = M_ZERO;
