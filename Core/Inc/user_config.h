@@ -222,31 +222,31 @@ extern "C" {
 
 #define NAME_ABAD_CAL_OFFSET    "ABAD_CAL_OFFSET"
 #define ADDR_ABAD_CAL_OFFSET    36
-#define CMD_ABAD_CAL_OFFSET    	' '
+#define CMD_ABAD_CAL_OFFSET    	'O'
 #define MIN_ABAD_CAL_OFFSET    	0.0f
 #define MAX_ABAD_CAL_OFFSET    	90.0f
 
 #define NAME_ABAD_CAL_SPEED     "ABAD_CAL_SPEED"
 #define ADDR_ABAD_CAL_SPEED     37
-#define CMD_ABAD_CAL_SPEED     	' '
+#define CMD_ABAD_CAL_SPEED     	'S'
 #define MIN_ABAD_CAL_SPEED     	0.0f
 #define MAX_ABAD_CAL_SPEED     	10.0f
 
 #define NAME_ABAD_CAL_KP        "ABAD_CAL_KP"
 #define ADDR_ABAD_CAL_KP        38
-#define CMD_ABAD_CAL_KP         ' '
+#define CMD_ABAD_CAL_KP         'J'
 #define MIN_ABAD_CAL_KP         0.0f
 #define MAX_ABAD_CAL_KP         1000.0f
 
 #define NAME_ABAD_CAL_KI        "ABAD_CAL_KI"
 #define ADDR_ABAD_CAL_KI        39
-#define CMD_ABAD_CAL_KI         ' '
+#define CMD_ABAD_CAL_KI         'U'
 #define MIN_ABAD_CAL_KI         0.0f
 #define MAX_ABAD_CAL_KI         10.0f
 
 #define NAME_ABAD_CAL_KD        "ABAD_CAL_KD"
 #define ADDR_ABAD_CAL_KD        40
-#define CMD_ABAD_CAL_KD         ' '
+#define CMD_ABAD_CAL_KD         'V'
 #define MIN_ABAD_CAL_KD         0.0f
 #define MAX_ABAD_CAL_KD         5.0f
 
@@ -336,7 +336,7 @@ extern "C" {
 
 #define NAME_ABAD_CAL_DIR       "ABAD_CAL_DIR"
 #define ADDR_ABAD_CAL_DIR       7
-#define CMD_ABAD_CAL_DIR       	' '
+#define CMD_ABAD_CAL_DIR       	'R'
 #define MIN_ABAD_CAL_DIR       	-1
 #define MAX_ABAD_CAL_DIR       	1
 
@@ -348,7 +348,7 @@ extern "C" {
 
 #define NAME_MOTOR_POSITION     "MOTOR_POSITION"
 #define ADDR_MOTOR_POSITION     9
-#define CMD_MOTOR_POSITION     	' '
+#define CMD_MOTOR_POSITION     	'P'
 #define MIN_MOTOR_POSITION     	0
 #define MAX_MOTOR_POSITION     	2
 

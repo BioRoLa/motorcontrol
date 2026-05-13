@@ -334,6 +334,8 @@
 	    printf(" Commands:\n\r");
 	    printf(" m - Motor Mode\n\r");
 	    printf(" c - Calibrate Encoder\n\r");
+	    printf(" h - Hall Calibration\n\r");
+	    printf(" a - AB/AD Hall Calibration\n\r");
 	    printf(" s - Setup\n\r");
 	    printf(" e - Display Encoder\n\r");
 	    printf(" z - Set Zero Position\n\r");
@@ -348,7 +350,7 @@
 	    printf("\r\n Motor:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "g", "Gear Ratio",                                "0",   "-",      GR);
 	    printf(" %-4s %-31s %-5s %-6s %.5f\n\r", "t", "Torque Constant (N-m/A)",                   "0",   "-",      KT);
-		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "p", "Motor Position (0=Hip, 1=FL/RR, 2=FR/RL)",  "0",   "2",      MOTOR_POSITION);
+		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "P", "Motor Position (0=Hip, 1=FL/RR, 2=FR/RL)",  "0",   "2",      MOTOR_POSITION);
 	    printf("\r\n Control:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "b", "Current Bandwidth (Hz)",                    "100", "2000",   I_BW);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "l", "Current Limit (A)",                         "0.0", "75.0",   I_MAX);
@@ -371,6 +373,12 @@
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "K", "Hall Calibration Kp (N-m/rad)",            "0.0", "1000.0", HALL_CAL_KP);
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "I", "Hall Calibration Ki (N-m*s/rad)",          "0.0", "10.0",   HALL_CAL_KI);
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "D", "Hall Calibration Kd (N-m/rad/s)",          "0.0", "5.0",    HALL_CAL_KD);
+		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "R", "AB/AD Calibration Direction",              "-1",  "1",      ABAD_CAL_DIR);
+		printf(" %-4s %-31s %-5s %-6s %.1f\n\r", "O", "AB/AD Calibration Offset",                 "0.0", "90.0",   ABAD_CAL_OFFSET);
+		printf(" %-4s %-31s %-5s %-6s %.1f\n\r", "S", "AB/AD Calibration Speed",                  "0.0", "10.0",   ABAD_CAL_SPEED);
+		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "J", "AB/AD Calibration Kp (N-m/rad)",          "0.0", "1000.0", ABAD_CAL_KP);
+		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "U", "AB/AD Calibration Ki (N-m*s/rad)",        "0.0", "10.0",   ABAD_CAL_KI);
+		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "V", "AB/AD Calibration Kd (N-m/rad/s)",        "0.0", "5.0",    ABAD_CAL_KD);
 	    printf("\r\n CAN:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %-5i\n\r", "n", "CAN ID",                                    "0",   "127",    CAN_ID);
 	    printf(" %-4s %-31s %-5s %-6s %-5i\n\r", "m", "CAN TX ID",                                 "0",   "127",    CAN_MASTER);

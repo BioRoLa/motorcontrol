@@ -195,6 +195,31 @@ void user_config_initialize(void){
 	float_reg_config[ADDR_MOTOR_MODE_KD].f_MIN		= MIN_MOTOR_MODE_KD;
 	float_reg_config[ADDR_MOTOR_MODE_KD].f_MAX		= MAX_MOTOR_MODE_KD;
 
+	float_reg_config[ADDR_ABAD_CAL_OFFSET].name	= NAME_ABAD_CAL_OFFSET;
+	float_reg_config[ADDR_ABAD_CAL_OFFSET].cmd		= CMD_ABAD_CAL_OFFSET;
+	float_reg_config[ADDR_ABAD_CAL_OFFSET].f_MIN	= MIN_ABAD_CAL_OFFSET;
+	float_reg_config[ADDR_ABAD_CAL_OFFSET].f_MAX	= MAX_ABAD_CAL_OFFSET;
+
+	float_reg_config[ADDR_ABAD_CAL_SPEED].name		= NAME_ABAD_CAL_SPEED;
+	float_reg_config[ADDR_ABAD_CAL_SPEED].cmd		= CMD_ABAD_CAL_SPEED;
+	float_reg_config[ADDR_ABAD_CAL_SPEED].f_MIN		= MIN_ABAD_CAL_SPEED;
+	float_reg_config[ADDR_ABAD_CAL_SPEED].f_MAX		= MAX_ABAD_CAL_SPEED;
+
+	float_reg_config[ADDR_ABAD_CAL_KP].name		= NAME_ABAD_CAL_KP;
+	float_reg_config[ADDR_ABAD_CAL_KP].cmd			= CMD_ABAD_CAL_KP;
+	float_reg_config[ADDR_ABAD_CAL_KP].f_MIN		= MIN_ABAD_CAL_KP;
+	float_reg_config[ADDR_ABAD_CAL_KP].f_MAX		= MAX_ABAD_CAL_KP;
+
+	float_reg_config[ADDR_ABAD_CAL_KI].name		= NAME_ABAD_CAL_KI;
+	float_reg_config[ADDR_ABAD_CAL_KI].cmd			= CMD_ABAD_CAL_KI;
+	float_reg_config[ADDR_ABAD_CAL_KI].f_MIN		= MIN_ABAD_CAL_KI;
+	float_reg_config[ADDR_ABAD_CAL_KI].f_MAX		= MAX_ABAD_CAL_KI;
+
+	float_reg_config[ADDR_ABAD_CAL_KD].name		= NAME_ABAD_CAL_KD;
+	float_reg_config[ADDR_ABAD_CAL_KD].cmd			= CMD_ABAD_CAL_KD;
+	float_reg_config[ADDR_ABAD_CAL_KD].f_MIN		= MIN_ABAD_CAL_KD;
+	float_reg_config[ADDR_ABAD_CAL_KD].f_MAX		= MAX_ABAD_CAL_KD;
+
 	// initialize the int_reg_config array
 	int_reg_config[ADDR_PHASE_ORDER].name			= NAME_PHASE_ORDER;
 	int_reg_config[ADDR_PHASE_ORDER].cmd			= CMD_PHASE_ORDER;
@@ -231,10 +256,20 @@ void user_config_initialize(void){
 	int_reg_config[ADDR_HALL_CAL_DIR].i_MIN			= MIN_HALL_CAL_DIR;
 	int_reg_config[ADDR_HALL_CAL_DIR].i_MAX			= MAX_HALL_CAL_DIR;
 
+	int_reg_config[ADDR_ABAD_CAL_DIR].name			= NAME_ABAD_CAL_DIR;
+	int_reg_config[ADDR_ABAD_CAL_DIR].cmd			= CMD_ABAD_CAL_DIR;
+	int_reg_config[ADDR_ABAD_CAL_DIR].i_MIN			= MIN_ABAD_CAL_DIR;
+	int_reg_config[ADDR_ABAD_CAL_DIR].i_MAX			= MAX_ABAD_CAL_DIR;
+
 	int_reg_config[ADDR_ENCODER_LUT].name			= NAME_ENCODER_LUT;
 	int_reg_config[ADDR_ENCODER_LUT].cmd			= CMD_ENCODER_LUT;
 	int_reg_config[ADDR_ENCODER_LUT].i_MIN			= MIN_ENCODER_LUT;
 	int_reg_config[ADDR_ENCODER_LUT].i_MAX			= MAX_ENCODER_LUT;
+
+	int_reg_config[ADDR_MOTOR_POSITION].name		= NAME_MOTOR_POSITION;
+	int_reg_config[ADDR_MOTOR_POSITION].cmd			= CMD_MOTOR_POSITION;
+	int_reg_config[ADDR_MOTOR_POSITION].i_MIN		= MIN_MOTOR_POSITION;
+	int_reg_config[ADDR_MOTOR_POSITION].i_MAX		= MAX_MOTOR_POSITION;
 }
 
 char* float_reg_update_uart(char cmd, const char *c_data){
