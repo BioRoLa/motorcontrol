@@ -1,5 +1,5 @@
-../Core/Src/user_config.c:16:6:user_config_initialize	16	static
-../Core/Src/user_config.c:209:7:float_reg_update_uart	40	static
-../Core/Src/user_config.c:240:5:float_reg_update_can	24	static
-../Core/Src/user_config.c:262:7:int_reg_update_uart	24	static
-../Core/Src/user_config.c:281:5:int_reg_update_can	24	static
+../Core/Src/user_config.c:17:6:user_config_initialize	16	static
+../Core/Src/user_config.c:240:7:float_reg_update_uart	40	static
+../Core/Src/user_config.c:275:5:float_reg_update_can	24	static
+../Core/Src/user_config.c:300:7:int_reg_update_uart	24	static
+../Core/Src/user_config.c:319:5:int_reg_update_can	24	static

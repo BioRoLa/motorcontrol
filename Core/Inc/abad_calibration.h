@@ -12,6 +12,7 @@
 #ifndef INC_ABAD_CALIBRATION_H_
 #define INC_ABAD_CALIBRATION_H_
 
+#include "math_ops.h"
 #include "fsm.h"
 #include "calibration.h"
 
@@ -58,9 +59,6 @@
 #define ABAD_PROBE_STEP_DEG     5.0f        // Small step size for probing
 #define ABAD_PROBE_CYCLES       3           // Number of cycles to attempt each direction
 #define ABAD_PROBE_STEP_RAD     (ABAD_PROBE_STEP_DEG * PI_F / 180.0f)
-
-/* PI constant */
-#define PI_F 3.14159265f
 
 /*
  * abad_hall_calibrate()

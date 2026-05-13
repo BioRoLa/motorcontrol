@@ -9,6 +9,7 @@
 
 #include "abad_calibration.h"
 #include "hw_config.h"
+#include "structs.h"
 #include "user_config.h"
 #include "math_ops.h"
 #include <stdio.h>
@@ -19,7 +20,6 @@ static void abad_cal_collect_transitions(FSMStruct * fsmstate);
 static void abad_cal_probe_direction(FSMStruct * fsmstate);
 static void abad_cal_build_map(FSMStruct * fsmstate);
 static void abad_cal_align_zero(FSMStruct * fsmstate);
-static uint8_t abad_detect_sensor_transition(void);
 static int abad_identify_magnet(int sensor_id, int hall_input);
 
 float abad_controller_to_joint_angle(float controller_angle){
@@ -272,14 +272,12 @@ static void abad_cal_build_map(FSMStruct * fsmstate) {
     // Initialize position map with collected data
     // Map indices: 0=-90°, 1=-60°, 2=-30°, 3=0°, 4=+30°, 5=+60°, 6=+90°
 
-    float zero_position = 0.0f;
     uint8_t found_zero = 0;
 
     // Find A@M1 (0°) and B@M4 (0°) transitions to establish zero
     for (uint8_t i = 0; i < transition_idx; i++) {
         if (transitions[i].sensor_id == 0 && transitions[i].magnet_id == 0) {
             // Sensor A detecting M1
-            zero_position = transitions[i].recorded_theta;
             found_zero = 1;
             break;
         }
@@ -290,7 +288,6 @@ static void abad_cal_build_map(FSMStruct * fsmstate) {
         for (uint8_t i = 0; i < transition_idx; i++) {
             if (transitions[i].sensor_id == 1 && transitions[i].magnet_id == 3) {
                 // Sensor B detecting M4
-                zero_position = transitions[i].recorded_theta;
                 found_zero = 1;
                 break;
             }

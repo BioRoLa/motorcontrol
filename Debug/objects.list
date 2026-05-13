@@ -1,3 +1,4 @@
+"./Core/Src/abad_calibration.o"
 "./Core/Src/adc.o"
 "./Core/Src/calibration.o"
 "./Core/Src/can.o"

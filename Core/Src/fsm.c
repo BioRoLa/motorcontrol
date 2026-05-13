@@ -596,8 +596,12 @@
                      }
                  }
              }
-             hall_cal.hall_cal_pcmd = (hall_cal.hall_cal_pcmd>2*PI_F) ? hall_cal.hall_cal_pcmd-=2*PI_F : hall_cal.hall_cal_pcmd ;
-             hall_cal.hall_cal_pcmd = (hall_cal.hall_cal_pcmd < 0)  ? hall_cal.hall_cal_pcmd+=2*PI_F : hall_cal.hall_cal_pcmd ;
+			 if(hall_cal.hall_cal_pcmd > 2*PI_F){
+				 hall_cal.hall_cal_pcmd -= 2*PI_F;
+			 }
+			 if(hall_cal.hall_cal_pcmd < 0){
+				 hall_cal.hall_cal_pcmd += 2*PI_F;
+			 }
              controller.p_des = hall_cal.hall_cal_pcmd ;
          }
          hall_cal.hall_preinput = hall_cal.hall_input ;

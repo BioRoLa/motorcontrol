@@ -39,7 +39,8 @@ Core/Src/fsm.o: ../Core/Src/fsm.c ../Core/Inc/fsm.h ../Core/Inc/usart.h \
  ../Core/Inc/fsm.h ../Core/Inc/drv8323.h ../Core/Inc/foc.h \
  ../Core/Inc/calibration.h ../Core/Inc/can.h ../Core/Inc/foc.h \
  ../Core/Inc/math_ops.h ../Core/Inc/position_sensor.h \
- ../Core/Inc/drv8323.h
+ ../Core/Inc/drv8323.h ../Core/Inc/abad_calibration.h \
+ ../Core/Inc/math_ops.h
 ../Core/Inc/fsm.h:
 ../Core/Inc/usart.h:
 ../Core/Inc/main.h:
@@ -96,3 +97,5 @@ Core/Src/fsm.o: ../Core/Src/fsm.c ../Core/Inc/fsm.h ../Core/Inc/usart.h \
 ../Core/Inc/math_ops.h:
 ../Core/Inc/position_sensor.h:
 ../Core/Inc/drv8323.h:
+../Core/Inc/abad_calibration.h:
+../Core/Inc/math_ops.h:
