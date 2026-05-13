@@ -12,6 +12,8 @@
 #include "math_ops.h"
 #include "hw_config.h"
 #include "user_config.h"
+#include "abad_calibration.h"
+#include <stdio.h>
 
 void set_dtc(ControllerStruct *controller){
 
@@ -290,6 +292,25 @@ void commutate(ControllerStruct *controller, EncoderStruct *encoder)
 void torque_control(ControllerStruct *controller){
 	/*----- convert theta_mech to 0~359.9999deg -----*/
 	static float pos, round;
+    if(MOTOR_POSITION != MOTOR_POS_HIP){
+        static uint8_t abad_limit_error_latched = 0;
+        static float abad_last_rejected_setpoint = 1000.0f;
+        float joint_setpoint = abad_controller_to_joint_angle(controller->p_des);
+        if(!abad_joint_angle_in_limits(joint_setpoint)){
+            if((!abad_limit_error_latched) || (fabsf(joint_setpoint - abad_last_rejected_setpoint) > 0.001f)){
+                printf("Error: AB/AD command %.1f deg outside mechanical limits [%.1f, %.1f] deg\r\n",
+                    joint_setpoint * 180.0f / PI_F,
+                    ABAD_LIMIT_MIN_DEG,
+                    ABAD_LIMIT_MAX_DEG);
+                abad_last_rejected_setpoint = joint_setpoint;
+                abad_limit_error_latched = 1;
+            }
+            controller->i_q_des = 0.0f;
+            controller->i_d_des = 0.0f;
+            return;
+        }
+        abad_limit_error_latched = 0;
+    }
 	pos = controller->theta_mech;
 	modff(pos/(2*PI_F),&round);
 	pos = pos - round*2*PI_F;

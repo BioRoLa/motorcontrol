@@ -36,8 +36,12 @@
 /* Misc. GPIO */
 #define LED         	GPIOC, GPIO_PIN_5	// LED Pin
 
-/* HALL Sensor */
+/* HALL Sensor - Hip */
 #define HALL_IO			GPIOC, GPIO_PIN_6
+
+/* HALL Sensor - AB/AD */
+#define HALL_A_IO		GPIOC, GPIO_PIN_7	// Abduction/Adduction sensor A
+#define HALL_B_IO		GPIOC, GPIO_PIN_8	// Abduction/Adduction sensor B
 
 /* CAN */
 #define CAN_H			hcan1				// CAN handle

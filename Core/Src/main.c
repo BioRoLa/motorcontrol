@@ -49,6 +49,7 @@
 #include "foc.h"
 #include "math_ops.h"
 #include "calibration.h"
+#include "abad_calibration.h"
 #include "version_info.h"
 /* USER CODE END Includes */
 
@@ -92,6 +93,7 @@ CalStruct comm_encoder_cal;
 CANTxMessage can_tx;
 CANRxMessage can_rx;
 HallCalStruct hall_cal;
+HallCalStructABAD abad_cal;
 
 /* init but don't allocate calibration arrays */
 int *error_array = NULL;
@@ -228,6 +230,22 @@ int main(void)
   hall_cal. hall_cal_offset = 0; // rad
   hall_cal.hall_cal_count = 0;
   hall_cal.hall_cal_state = CODE_HALL_UNCALIBRATED;
+
+  /* AB/AD Hall calibration setup */
+  abad_cal.hall_a_input = 1;
+  abad_cal.hall_a_preinput = 1;
+  abad_cal.hall_b_input = 1;
+  abad_cal.hall_b_preinput = 1;
+  abad_cal.abad_cal_pcmd = 0;
+  abad_cal.abad_cal_speed = 0.25; // rad/s
+  abad_cal.abad_present_pos = 0;
+  abad_cal.transition_count = 0;
+  abad_cal.active_sensor = 2; // 0=A, 1=B, 2=either
+  abad_cal.current_angle_estimate = 0;
+  abad_cal.abad_cal_state = CODE_ABAD_UNCALIBRATED;
+
+  /* Motor position setup - configurable per deployment */
+  MOTOR_POSITION = MOTOR_POS_HIP;  // Default: can be changed to MOTOR_POS_ABAD_FL_RR or MOTOR_POS_ABAD_FR_RL
 
   /* commutation encoder setup */
   comm_encoder.m_zero = M_ZERO;

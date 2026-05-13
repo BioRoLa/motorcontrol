@@ -17,6 +17,7 @@
 #include "math_ops.h"
 #include "position_sensor.h"
 #include "drv8323.h"
+#include "abad_calibration.h"
 
  void run_fsm(FSMStruct * fsmstate){
 	 /* run_fsm is run every commutation interrupt cycle */
@@ -94,7 +95,21 @@
 
 			 controller.timeout ++;
 			 break;
-	 }
+	 case ABAD_CALIBRATE:
+		 /* If CAN has timed out, reset all commands */
+		 if((CAN_TIMEOUT > 0 ) && (controller.timeout > CAN_TIMEOUT)){
+			 zero_commands(&controller);
+		 }
+		 /* Otherwise, commutate */
+
+		 /* Calibrate AB/AD Hall Sensor */
+		 abad_hall_calibrate(fsmstate);
+
+		 torque_control(&controller);
+		 commutate(&controller, &comm_encoder);
+
+		 controller.timeout ++;
+		 break;	 }
 
  }
 
@@ -150,6 +165,18 @@
 				controller.ki = HALL_CAL_KI;
 				controller.kd = HALL_CAL_KD;
 				enter_motor_mode();
+				break;
+			case ABAD_CALIBRATE:
+				if (fsmstate->print_uart_msg){
+					printf("\r\nEntering AB/AD Hall Calibration Mode\r\n");
+				}
+				controller.kp = ABAD_CAL_KP;
+				controller.ki = ABAD_CAL_KI;
+				controller.kd = ABAD_CAL_KD;
+				enter_motor_mode();
+				abad_cal_reset();
+				abad_cal.abad_cal_state = CODE_ABAD_CALIBRATING;
+				abad_cal.abad_present_pos = controller.theta_mech;
 				break;
 
 		}
@@ -212,6 +239,15 @@
 				drv_disable_gd(drv);
 				fsmstate->ready = 1;
 				break;
+			case ABAD_CALIBRATE:
+				if (fsmstate->print_uart_msg){
+					printf("\r\nExiting AB/AD Hall Calibration Mode\r\n");
+				}
+				GPIO_DISABLE;
+				LED_LOW;
+				drv_disable_gd(drv);
+				fsmstate->ready = 1;
+				break;
 		}
 
  }
@@ -253,6 +289,14 @@
 				case HALL_CAL_CMD:
 					fsmstate->next_state = HALL_CALIBRATE;
 					fsmstate->ready = 0;
+					break;
+				case ABAD_CAL_CMD:
+					if (MOTOR_POSITION == MOTOR_POS_HIP) {
+						printf("Error: Motor configured as HIP, cannot run AB/AD calibration\r\n");
+					} else {
+						fsmstate->next_state = ABAD_CALIBRATE;
+						fsmstate->ready = 0;
+					}
 					break;
 				default:
 					break;
@@ -304,6 +348,7 @@
 	    printf("\r\n Motor:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "g", "Gear Ratio",                                "0",   "-",      GR);
 	    printf(" %-4s %-31s %-5s %-6s %.5f\n\r", "t", "Torque Constant (N-m/A)",                   "0",   "-",      KT);
+		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "p", "Motor Position (0=Hip, 1=FL/RR, 2=FR/RL)",  "0",   "2",      MOTOR_POSITION);
 	    printf("\r\n Control:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "b", "Current Bandwidth (Hz)",                    "100", "2000",   I_BW);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "l", "Current Limit (A)",                         "0.0", "75.0",   I_MAX);

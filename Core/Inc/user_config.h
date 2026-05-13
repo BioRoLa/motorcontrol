@@ -220,6 +220,36 @@ extern "C" {
 #define MIN_MOTOR_MODE_KD        0.0f
 #define MAX_MOTOR_MODE_KD        5.0f
 
+#define NAME_ABAD_CAL_OFFSET    "ABAD_CAL_OFFSET"
+#define ADDR_ABAD_CAL_OFFSET    36
+#define CMD_ABAD_CAL_OFFSET    	' '
+#define MIN_ABAD_CAL_OFFSET    	0.0f
+#define MAX_ABAD_CAL_OFFSET    	90.0f
+
+#define NAME_ABAD_CAL_SPEED     "ABAD_CAL_SPEED"
+#define ADDR_ABAD_CAL_SPEED     37
+#define CMD_ABAD_CAL_SPEED     	' '
+#define MIN_ABAD_CAL_SPEED     	0.0f
+#define MAX_ABAD_CAL_SPEED     	10.0f
+
+#define NAME_ABAD_CAL_KP        "ABAD_CAL_KP"
+#define ADDR_ABAD_CAL_KP        38
+#define CMD_ABAD_CAL_KP         ' '
+#define MIN_ABAD_CAL_KP         0.0f
+#define MAX_ABAD_CAL_KP         1000.0f
+
+#define NAME_ABAD_CAL_KI        "ABAD_CAL_KI"
+#define ADDR_ABAD_CAL_KI        39
+#define CMD_ABAD_CAL_KI         ' '
+#define MIN_ABAD_CAL_KI         0.0f
+#define MAX_ABAD_CAL_KI         10.0f
+
+#define NAME_ABAD_CAL_KD        "ABAD_CAL_KD"
+#define ADDR_ABAD_CAL_KD        40
+#define CMD_ABAD_CAL_KD         ' '
+#define MIN_ABAD_CAL_KD         0.0f
+#define MAX_ABAD_CAL_KD         5.0f
+
 
 #define I_BW                    __float_reg[ADDR_I_BW]	            // Current loop bandwidth
 #define I_MAX                   __float_reg[ADDR_I_MAX]             // Current limit
@@ -255,6 +285,11 @@ extern "C" {
 #define MOTOR_MODE_KP           __float_reg[ADDR_MOTOR_MODE_KP]
 #define MOTOR_MODE_KI           __float_reg[ADDR_MOTOR_MODE_KI]
 #define MOTOR_MODE_KD           __float_reg[ADDR_MOTOR_MODE_KD]
+#define ABAD_CAL_OFFSET         __float_reg[ADDR_ABAD_CAL_OFFSET]
+#define ABAD_CAL_SPEED          __float_reg[ADDR_ABAD_CAL_SPEED]
+#define ABAD_CAL_KP             __float_reg[ADDR_ABAD_CAL_KP]
+#define ABAD_CAL_KI             __float_reg[ADDR_ABAD_CAL_KI]
+#define ABAD_CAL_KD             __float_reg[ADDR_ABAD_CAL_KD]
 
 
 #define NAME_PHASE_ORDER        "PHASE_ORDER"	                    // Phase swapping during calibration
@@ -299,11 +334,28 @@ extern "C" {
 #define MIN_HALL_CAL_DIR       	-1
 #define MAX_HALL_CAL_DIR       	1
 
+#define NAME_ABAD_CAL_DIR       "ABAD_CAL_DIR"
+#define ADDR_ABAD_CAL_DIR       7
+#define CMD_ABAD_CAL_DIR       	' '
+#define MIN_ABAD_CAL_DIR       	-1
+#define MAX_ABAD_CAL_DIR       	1
+
 #define NAME_ENCODER_LUT        "ENCODER_LUT"
-#define ADDR_ENCODER_LUT        7
+#define ADDR_ENCODER_LUT        8
 #define CMD_ENCODER_LUT        	' '
 #define MIN_ENCODER_LUT        	GLOBAL_MIN_VALUE
 #define MAX_ENCODER_LUT        	GLOBAL_MAX_VALUE
+
+#define NAME_MOTOR_POSITION     "MOTOR_POSITION"
+#define ADDR_MOTOR_POSITION     9
+#define CMD_MOTOR_POSITION     	' '
+#define MIN_MOTOR_POSITION     	0
+#define MAX_MOTOR_POSITION     	2
+
+/* Motor position/role definitions */
+#define MOTOR_POS_HIP           0  // Hip flexion/extension
+#define MOTOR_POS_ABAD_FL_RR    1  // AB/AD for Front-Left or Rear-Right
+#define MOTOR_POS_ABAD_FR_RL    2  // AB/AD for Front-Right or Rear-Left
 
 
 #define PHASE_ORDER             __int_reg[ADDR_PHASE_ORDER]         // Phase swapping during calibration
@@ -313,7 +365,9 @@ extern "C" {
 #define M_ZERO					__int_reg[ADDR_M_ZERO]
 #define E_ZERO					__int_reg[ADDR_E_ZERO]
 #define HALL_CAL_DIR            __int_reg[ADDR_HALL_CAL_DIR]
+#define ABAD_CAL_DIR            __int_reg[ADDR_ABAD_CAL_DIR]
 #define ENCODER_LUT             __int_reg[ADDR_ENCODER_LUT]         // Encoder offset LUT - 128 elements long
+#define MOTOR_POSITION          __int_reg[ADDR_MOTOR_POSITION]      // Motor position/role (HIP, ABAD_FL/RR, ABAD_FR/RL)
 
 
 #define STR_INVALID_VALUE		"Not a valid value\r\n"
@@ -328,6 +382,11 @@ extern "C" {
 #define CODE_HALL_CALIBRATING	1
 #define CODE_HALL_CAL_SUCCESS	2
 #define CODE_HALL_CAL_FAIL		3
+
+#define CODE_ABAD_UNCALIBRATED	0
+#define CODE_ABAD_CALIBRATING	1
+#define CODE_ABAD_CAL_SUCCESS	2
+#define CODE_ABAD_CAL_FAIL		3
 
 
 struct FloatRegConfig{

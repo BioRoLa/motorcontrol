@@ -52,6 +52,27 @@ typedef struct{
 	int hall_cal_state;
 } HallCalStruct;
 
+// AB/AD Hall Calibration Structure
+// Dual sensors (A, B) reading 4 magnets (M1-M4) at 30° spacing
+// Position range: -90° (A@M4) to +90° (B@M1)
+#define ABAD_MAGNET_COUNT 4
+#define ABAD_POSITION_MAP_SIZE 7
+
+typedef struct{
+	int hall_a_input;
+	int hall_a_preinput;
+	int hall_b_input;
+	int hall_b_preinput;
+	float abad_cal_pcmd;
+	float abad_cal_speed; // rad/s
+	float abad_present_pos; // calibration start position
+	uint8_t transition_count; // count of detected magnet transitions
+	uint8_t active_sensor; // 0=A, 1=B, 2=either
+	float position_map[ABAD_POSITION_MAP_SIZE]; // [-90, -60, -30, 0, 30, 60, 90] degrees in radians
+	float current_angle_estimate; // Current estimated angle from hall sensor readings
+	int abad_cal_state;
+} HallCalStructABAD;
+
 void order_phases(EncoderStruct *encoder, ControllerStruct *controller, CalStruct *cal, int loop_count);
 void calibrate_encoder(EncoderStruct *encoder, ControllerStruct *controller, CalStruct *cal,
 		int loop_count);
