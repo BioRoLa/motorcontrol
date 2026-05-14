@@ -95,6 +95,9 @@
 
 			 controller.timeout ++;
 			 break;
+		 case HALL_DEBUG_MODE:
+			 hall_debug_mode(fsmstate);
+			 break;
 	 case ABAD_CALIBRATE:
 		 /* If CAN has timed out, reset all commands */
 		 if((CAN_TIMEOUT > 0 ) && (controller.timeout > CAN_TIMEOUT)){
@@ -165,6 +168,18 @@
 				controller.ki = HALL_CAL_KI;
 				controller.kd = HALL_CAL_KD;
 				enter_motor_mode();
+				break;
+			case HALL_DEBUG_MODE:
+				if (fsmstate->print_uart_msg){
+					printf("\r\nEntering Hall Debug Mode\r\n");
+					printf(" Move magnets manually and observe raw/active values below.\r\n");
+					printf(" Press ESC to return to menu.\r\n");
+				}
+				zero_commands(&controller);
+				reset_foc(&controller);
+				drv_disable_gd(drv);
+				GPIO_DISABLE;
+				LED_LOW;
 				break;
 			case ABAD_CALIBRATE:
 				if (fsmstate->print_uart_msg){
@@ -239,6 +254,12 @@
 				drv_disable_gd(drv);
 				fsmstate->ready = 1;
 				break;
+			case HALL_DEBUG_MODE:
+				if (fsmstate->print_uart_msg){
+					printf("\r\nExiting Hall Debug Mode\r\n");
+				}
+				fsmstate->ready = 1;
+				break;
 			case ABAD_CALIBRATE:
 				if (fsmstate->print_uart_msg){
 					printf("\r\nExiting AB/AD Hall Calibration Mode\r\n");
@@ -290,6 +311,10 @@
 					fsmstate->next_state = HALL_CALIBRATE;
 					fsmstate->ready = 0;
 					break;
+				case HALL_DEBUG_CMD:
+					fsmstate->next_state = HALL_DEBUG_MODE;
+					fsmstate->ready = 0;
+					break;
 				case ABAD_CAL_CMD:
 					if (MOTOR_POSITION == MOTOR_POS_HIP) {
 						printf("Error: Motor configured as HIP, cannot run AB/AD calibration\r\n");
@@ -335,6 +360,7 @@
 	    printf(" m - Motor Mode\n\r");
 	    printf(" c - Calibrate Encoder\n\r");
 	    printf(" h - Hall Calibration\n\r");
+	    printf(" x - Hall Sensor Debug\n\r");
 	    printf(" a - AB/AD Hall Calibration\n\r");
 	    printf(" s - Setup\n\r");
 	    printf(" e - Display Encoder\n\r");
@@ -615,4 +641,43 @@
          hall_cal.hall_preinput = hall_cal.hall_input ;
      }
  }
+
+
+
+void hall_debug_mode(FSMStruct * fsmstate){
+	(void)fsmstate;
+	static uint8_t init = 0;
+	static uint8_t prev_hip = 1;
+	static uint8_t prev_a = 1;
+	static uint8_t prev_b = 1;
+	static uint16_t print_div = 0;
+
+	uint8_t hip_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_IO);
+	uint8_t hall_a_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_A_IO);
+	uint8_t hall_b_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_B_IO);
+
+	if(!init){
+		prev_hip = hip_raw;
+		prev_a = hall_a_raw;
+		prev_b = hall_b_raw;
+		init = 1;
+		printf("Hall Debug: initial HIP=%d A=%d B=%d (active=raw==0)\r\n", hip_raw, hall_a_raw, hall_b_raw);
+	}
+
+	if((hip_raw != prev_hip) || (hall_a_raw != prev_a) || (hall_b_raw != prev_b)){
+		printf("Hall edge: HIP %d->%d | A %d->%d | B %d->%d\r\n",
+				prev_hip, hip_raw, prev_a, hall_a_raw, prev_b, hall_b_raw);
+		prev_hip = hip_raw;
+		prev_a = hall_a_raw;
+		prev_b = hall_b_raw;
+	}
+
+	print_div++;
+	if(print_div >= 2000){
+		print_div = 0;
+		printf("Hall raw: HIP=%d A=%d B=%d | active: HIP=%d A=%d B=%d\r\n",
+				hip_raw, hall_a_raw, hall_b_raw,
+				(hip_raw == 0), (hall_a_raw == 0), (hall_b_raw == 0));
+	}
+}
 

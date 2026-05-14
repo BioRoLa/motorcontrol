@@ -9,6 +9,7 @@ This repo targets STM32CubeIDE-generated projects and is designed for practical 
 - encoder calibration
 - single hall calibration
 - AB/AD dual-hall calibration support
+- manual hall sensor debug mode
 - CAN + UART configuration interfaces
 
 ## Quick start
@@ -73,6 +74,7 @@ The control flow is interrupt-driven and state-machine controlled.
   - `ENCODER_MODE`
   - `ENCODER_CALIBRATE`
   - `HALL_CALIBRATE`
+- `HALL_DEBUG_MODE`
   - `ABAD_CALIBRATE`
 
 ## Calibration control logic
@@ -173,6 +175,7 @@ High-level menu commands in `fsm.h`:
 - `s`: setup mode
 - `z`: set encoder zero
 - `h`: hall calibration mode
+- `x`: hall sensor debug mode (raw + active prints for HIP/A/B halls)
 - `a`: AB/AD hall calibration mode
 - `ESC` (`27`): return to menu from active mode
 
@@ -283,6 +286,9 @@ Reserved/unused in UART setup parser:
  Commands:
 	m - Motor Mode
 	c - Calibrate Encoder
+   h - Hall Calibration
+   x - Hall Sensor Debug
+   a - AB/AD Hall Calibration
 	s - Setup
 	e - Display Encoder
 	z - Set Zero Position
@@ -336,8 +342,9 @@ AB/AD support uses two digital hall sensors and a dedicated calibration flow.
 
 Sensor pins (default):
 
-- `HALL_A_IO`: `GPIOC, GPIO_PIN_7`
-- `HALL_B_IO`: `GPIOC, GPIO_PIN_8`
+- `HALL_A_IO`: `GPIOB, GPIO_PIN_14`
+- `HALL_B_IO`: `GPIOB, GPIO_PIN_15`
+- Hip hall (`HALL_IO`): `GPIOC, GPIO_PIN_6`
 
 Motor role selection is runtime-configurable:
 
@@ -358,6 +365,27 @@ Startup probe and reset behavior:
 - On entering `ABAD_CALIBRATE`, the firmware calls `abad_cal_reset()` to clear any previous transition history and initialize the internal command/estimate state so calibration starts cleanly.
 - **Active direction probe**: before collecting hall transitions, the firmware probes the configured calibration direction (`ABAD_CAL_DIR` with motor-role inversion) using a short fixed-angle step (`ABAD_PROBE_STEP_DEG`) over `ABAD_PROBE_CYCLES` cycles. If hall transitions are detected, that direction is locked for the rest of calibration. If not, it performs exactly one opposite-direction attempt. If neither attempt produces transitions, calibration aborts with an explicit probe failure message.
 - This active probe **requires no assumptions about encoder accuracy** at startup and automatically selects the productive direction regardless of mechanical position or encoder reference quality.
+
+### Hall debug mode
+
+- Enter from menu with `x`.
+- Prints raw hall values and derived active state (`active = raw == 0`) for:
+  - HIP hall (`PC6`)
+  - AB/AD Hall A (`PB14`)
+  - AB/AD Hall B (`PB15`)
+- Prints immediate edge transitions (`prev -> new`) when any hall input changes.
+- Mode is non-driving for safe manual magnet/wiring bring-up. Press `ESC` to return to menu.
+
+## Motor breakout pinout (motor driver)
+
+The current firmware pinout mapping for motor-breakout digital hall lines is:
+
+| Breakout pin | MCU pin | Firmware role                            |
+| ------------ | ------- | ---------------------------------------- |
+| D0           | PC6     | Hip hall (`HALL_IO`)                     |
+| D1           | PB14    | AB/AD Hall A (`HALL_A_IO`)               |
+| D2           | PB15    | AB/AD Hall B (`HALL_B_IO`)               |
+| D3           | PC7     | Spare/available (not used by hall logic) |
 
 ## Safety and fault behavior
 

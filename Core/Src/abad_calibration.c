@@ -64,6 +64,7 @@ static int effective_abad_cal_dir = 1;  // Effective calibration direction durin
 static uint8_t abad_probe_cycle_count = 0;
 static uint8_t abad_probe_attempt_count = 0;
 static uint8_t abad_probe_initial_transition_count = 0;
+static uint8_t abad_probe_seen_edge = 0;  // Edge detected directly during probe phase
 static int abad_probe_dir = 1;
 
 /* Transition history for position map */
@@ -156,6 +157,7 @@ void abad_cal_reset(void){
     abad_probe_cycle_count = 0;
     abad_probe_attempt_count = 0;
     abad_probe_initial_transition_count = 0;
+    abad_probe_seen_edge = 0;
 
     // Initialize probe direction from configured direction + motor orientation
     abad_probe_dir = ABAD_CAL_DIR;
@@ -174,37 +176,53 @@ void abad_cal_reset(void){
  * Tries configured direction first; if no transitions detected, tries opposite direction.
  */
 static void abad_cal_probe_direction(FSMStruct * fsmstate) {
-    // On first cycle of this phase, record the current transition count as baseline
+    // On first cycle of this phase, reset edge flag and print initial state
     if (abad_probe_cycle_count == 0) {
-        abad_probe_initial_transition_count = abad_cal.transition_count;
+        abad_probe_seen_edge = 0;
         printf("AB/AD Cal: probing direction (dir=%d, attempt=%d)...\r\n", abad_probe_dir, abad_probe_attempt_count + 1);
+        printf("AB/AD Cal: initial Hall A=%d B=%d\r\n",
+            (int)HAL_GPIO_ReadPin(HALL_A_IO), (int)HAL_GPIO_ReadPin(HALL_B_IO));
     }
 
-    // Increment probe cycle counter
+    // Detect edges directly (fix: transition_count is only updated in collect phase)
+    if ((abad_cal.hall_a_input != abad_cal.hall_a_preinput) ||
+        (abad_cal.hall_b_input != abad_cal.hall_b_preinput)) {
+        abad_probe_seen_edge = 1;
+        printf("AB/AD Cal: edge! A=%d->%d B=%d->%d cyc=%d\r\n",
+            (int)abad_cal.hall_a_preinput, (int)abad_cal.hall_a_input,
+            (int)abad_cal.hall_b_preinput, (int)abad_cal.hall_b_input,
+            (int)abad_probe_cycle_count);
+    }
+
     abad_probe_cycle_count++;
 
-    // After ABAD_PROBE_CYCLES in one direction, check if we detected transitions
+    // Per-cycle observability (remove after bring-up)
+    printf("AB/AD probe cyc=%d dir=%d A=%d B=%d pcmd=%.2f\r\n",
+        (int)abad_probe_cycle_count, abad_probe_dir,
+        (int)abad_cal.hall_a_input, (int)abad_cal.hall_b_input,
+        (double)abad_cal.abad_cal_pcmd);
+
+    // After ABAD_PROBE_CYCLES, evaluate result
     if (abad_probe_cycle_count > ABAD_PROBE_CYCLES) {
-        uint8_t detected_transitions = (abad_cal.transition_count > abad_probe_initial_transition_count);
-        
-        if (detected_transitions) {
-            // Current direction works - move to transition collection
-            printf("AB/AD Cal: direction confirmed (dir=%d), collected %d transitions\r\n",
-                abad_probe_dir, (abad_cal.transition_count - abad_probe_initial_transition_count));
+        if (abad_probe_seen_edge) {
+            printf("AB/AD Cal: direction confirmed (dir=%d)\r\n", abad_probe_dir);
             effective_abad_cal_dir = abad_probe_dir;
             abad_cal_phase = ABAD_CAL_PHASE_COLLECT_TRANSITIONS;
             abad_probe_cycle_count = 0;
+            abad_probe_seen_edge = 0;
             return;
         } else if (abad_probe_attempt_count == 0) {
-            // No transitions detected - try opposite direction
+            // Try opposite direction
             abad_probe_dir = -abad_probe_dir;
-            abad_probe_initial_transition_count = abad_cal.transition_count;
             abad_probe_cycle_count = 0;
+            abad_probe_seen_edge = 0;
             abad_probe_attempt_count = 1;
             printf("AB/AD Cal: no transitions, trying opposite direction (dir=%d)...\r\n", abad_probe_dir);
         } else {
-            // Both directions failed to produce hall transitions
+            // Both directions failed
             printf("AB/AD Cal: probe failed - no hall transitions detected in either direction\r\n");
+            printf("AB/AD Cal: final Hall A=%d B=%d\r\n",
+                (int)HAL_GPIO_ReadPin(HALL_A_IO), (int)HAL_GPIO_ReadPin(HALL_B_IO));
             abad_cal.abad_cal_state = CODE_ABAD_CAL_FAIL;
             fsmstate->next_state = MENU_MODE;
             return;

@@ -25,6 +25,7 @@ extern "C" {
 #define ENCODER_CALIBRATE   5
 #define ENCODER_MODE        6
 #define ABAD_CALIBRATE      7
+#define HALL_DEBUG_MODE     8
 
 #define MENU_CMD			27
 #define MOTOR_CMD			'm'
@@ -35,6 +36,7 @@ extern "C" {
 #define ENTER_CMD			13
 #define HALL_CAL_CMD		'h'
 #define ABAD_CAL_CMD		'a'
+#define HALL_DEBUG_CMD      'x'
 #define MOTOR_POS_CMD       'p'
 
 
@@ -60,6 +62,7 @@ void process_user_input(FSMStruct * fsmstate);
 void encoder_set_zero(void);
 void hall_calibrate(FSMStruct * fsmstate);
 void abad_hall_calibrate(FSMStruct * fsmstate);
+void hall_debug_mode(FSMStruct * fsmstate);
 void abad_encoder_set_zero(void);
 
 #ifdef __cplusplus

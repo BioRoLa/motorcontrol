@@ -56,8 +56,8 @@
 
 /* Active probe configuration: small bidirectional test at startup to auto-select
  * the direction that shows hall activity, regardless of encoder reference accuracy. */
-#define ABAD_PROBE_STEP_DEG     5.0f        // Small step size for probing
-#define ABAD_PROBE_CYCLES       3           // Number of cycles to attempt each direction
+#define ABAD_PROBE_STEP_DEG     10.0f       // Step size per probe cycle
+#define ABAD_PROBE_CYCLES       6           // Cycles per direction (~60 deg sweep)
 #define ABAD_PROBE_STEP_RAD     (ABAD_PROBE_STEP_DEG * PI_F / 180.0f)
 
 /*
