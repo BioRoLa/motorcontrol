@@ -16,30 +16,11 @@
 #include "fsm.h"
 #include "calibration.h"
 
-/* Magnet positions on rotor (fixed, physical) */
-#define MAGNET_M1_POS   -45.0f  // degrees
-#define MAGNET_M2_POS   -15.0f
-#define MAGNET_M3_POS    15.0f
-#define MAGNET_M4_POS    45.0f
-
-/* Sensor positions (fixed, physical) */
-#define SENSOR_A_POS    -45.0f  // degrees
-#define SENSOR_B_POS     45.0f
-
-/* Position map indices (object angle in degrees, converted to radians) */
-#define ABAD_POS_M90     0   // -90°: A@M4
-#define ABAD_POS_M60     1   // -60°: A@M3
-#define ABAD_POS_M30     2   // -30°: A@M2
-#define ABAD_POS_0       3   //   0°: A@M1 + B@M4 (zero position)
-#define ABAD_POS_P30     4   //  +30°: B@M3
-#define ABAD_POS_P60     5   //  +60°: B@M2
-#define ABAD_POS_P90     6   //  +90°: B@M1
-
 /* Calibration phases */
-#define ABAD_CAL_PHASE_PROBE_DIRECTION      0  // Active direction probe at startup
-#define ABAD_CAL_PHASE_COLLECT_TRANSITIONS  1  // Collecting magnet transitions
-#define ABAD_CAL_PHASE_MAP_POSITIONS        2  // Building position map
-#define ABAD_CAL_PHASE_ALIGN_ZERO           3  // Aligning to zero position
+#define ABAD_CAL_PHASE_FIND_BOTTOM_SENSOR   0  // Move upward until the bottom sensor sees a magnet
+#define ABAD_CAL_PHASE_FIND_ZERO            1  // Continue upward until both sensors are active
+#define ABAD_CAL_PHASE_CENTER_SAMPLE_REVERSE 2 // Reverse and sample both-active trigger in opposite direction
+#define ABAD_CAL_PHASE_CENTER_ZERO          3  // Move to midpoint of forward/reverse trigger samples
 
 /* Mechanical limits for AB/AD joint */
 #define ABAD_LIMIT_MIN_DEG     -85.0f
@@ -54,11 +35,13 @@
 #define ABAD_SAFE_MAX_RAD     (ABAD_SAFE_MAX_DEG * PI_F / 180.0f)
 #define ABAD_CAL_ALIGN_TOL_RAD (ABAD_CAL_ALIGN_TOL_DEG * PI_F / 180.0f)
 
-/* Active probe configuration: small bidirectional test at startup to auto-select
- * the direction that shows hall activity, regardless of encoder reference accuracy. */
-#define ABAD_PROBE_STEP_DEG     10.0f       // Step size per probe cycle
-#define ABAD_PROBE_CYCLES       6           // Cycles per direction (~60 deg sweep)
-#define ABAD_PROBE_STEP_RAD     (ABAD_PROBE_STEP_DEG * PI_F / 180.0f)
+/* Simplified AB/AD calibration configuration.
+ * Step 1: find the expected bottom sensor within 30 degrees of upward travel.
+ * Step 2: keep moving upward until both sensors detect simultaneously.
+ * Fail if the bottom sensor toggles more than three times before reaching zero. */
+#define ABAD_PROBE_TRAVEL_DEG    30.0f
+#define ABAD_PROBE_TRAVEL_RAD    (ABAD_PROBE_TRAVEL_DEG * PI_F / 180.0f)
+#define ABAD_MAX_BOTTOM_TRANSITIONS 3
 
 /*
  * abad_hall_calibrate()
@@ -74,13 +57,6 @@ void abad_hall_calibrate(FSMStruct * fsmstate);
  */
 void abad_encoder_set_zero(void);
 
-/*
- * abad_get_position()
- * Returns current estimated AB/AD angle based on hall sensor readings
- * Uses position map and sensor priority logic
- * Returns angle in radians, range [-π/2, π/2]
- */
-float abad_get_position(void);
 void abad_cal_reset(void);
 
 /*

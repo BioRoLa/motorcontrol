@@ -308,20 +308,16 @@
 					encoder_set_zero();
 					break;
 				case HALL_CAL_CMD:
-					fsmstate->next_state = HALL_CALIBRATE;
+					if (MOTOR_POSITION == MOTOR_POS_HIP) {
+						fsmstate->next_state = HALL_CALIBRATE;
+					} else {
+						fsmstate->next_state = ABAD_CALIBRATE;
+					}
 					fsmstate->ready = 0;
 					break;
 				case HALL_DEBUG_CMD:
 					fsmstate->next_state = HALL_DEBUG_MODE;
 					fsmstate->ready = 0;
-					break;
-				case ABAD_CAL_CMD:
-					if (MOTOR_POSITION == MOTOR_POS_HIP) {
-						printf("Error: Motor configured as HIP, cannot run AB/AD calibration\r\n");
-					} else {
-						fsmstate->next_state = ABAD_CALIBRATE;
-						fsmstate->ready = 0;
-					}
 					break;
 				default:
 					break;
@@ -360,8 +356,7 @@
 	    printf(" m - Motor Mode\n\r");
 	    printf(" c - Calibrate Encoder\n\r");
 	    printf(" h - Hall Calibration\n\r");
-	    printf(" x - Hall Sensor Debug\n\r");
-	    printf(" a - AB/AD Hall Calibration\n\r");
+	    printf(" q - Hall Sensor Debug\n\r");
 	    printf(" s - Setup\n\r");
 	    printf(" e - Display Encoder\n\r");
 	    printf(" z - Set Zero Position\n\r");
@@ -650,34 +645,29 @@ void hall_debug_mode(FSMStruct * fsmstate){
 	static uint8_t prev_hip = 1;
 	static uint8_t prev_a = 1;
 	static uint8_t prev_b = 1;
-	static uint16_t print_div = 0;
 
-	uint8_t hip_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_IO);
-	uint8_t hall_a_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_A_IO);
-	uint8_t hall_b_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_B_IO);
+	uint8_t hip_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_IO);      // PC6
+	uint8_t hall_a_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_A_IO); // PB14
+	uint8_t hall_b_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_B_IO); // PB15
+	float enc_angle_deg = controller.theta_mech * 180.0f / PI_F;
 
 	if(!init){
 		prev_hip = hip_raw;
 		prev_a = hall_a_raw;
 		prev_b = hall_b_raw;
 		init = 1;
-		printf("Hall Debug: initial HIP=%d A=%d B=%d (active=raw==0)\r\n", hip_raw, hall_a_raw, hall_b_raw);
+		printf("Hall Debug init: PC6(HIP)=%d PB14(A)=%d PB15(B)=%d | active HIP=%d A=%d B=%d | ENC=%.2f deg\r\n",
+			hip_raw, hall_a_raw, hall_b_raw,
+			(hip_raw == 0), (hall_a_raw == 0), (hall_b_raw == 0),
+			(double)enc_angle_deg);
 	}
 
 	if((hip_raw != prev_hip) || (hall_a_raw != prev_a) || (hall_b_raw != prev_b)){
-		printf("Hall edge: HIP %d->%d | A %d->%d | B %d->%d\r\n",
-				prev_hip, hip_raw, prev_a, hall_a_raw, prev_b, hall_b_raw);
+		printf("Hall edge: PC6(HIP) %d->%d | PB14(A) %d->%d | PB15(B) %d->%d | ENC=%.2f deg\r\n",
+			prev_hip, hip_raw, prev_a, hall_a_raw, prev_b, hall_b_raw, (double)enc_angle_deg);
 		prev_hip = hip_raw;
 		prev_a = hall_a_raw;
 		prev_b = hall_b_raw;
-	}
-
-	print_div++;
-	if(print_div >= 2000){
-		print_div = 0;
-		printf("Hall raw: HIP=%d A=%d B=%d | active: HIP=%d A=%d B=%d\r\n",
-				hip_raw, hall_a_raw, hall_b_raw,
-				(hip_raw == 0), (hall_a_raw == 0), (hall_b_raw == 0));
 	}
 }
 

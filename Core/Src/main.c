@@ -246,9 +246,7 @@ int main(void)
   abad_cal.abad_cal_pcmd = 0;
   abad_cal.abad_cal_speed = 0.25; // rad/s
   abad_cal.abad_present_pos = 0;
-  abad_cal.transition_count = 0;
-  abad_cal.active_sensor = 2; // 0=A, 1=B, 2=either
-  abad_cal.current_angle_estimate = 0;
+  abad_cal.bottom_transition_count = 0;
   abad_cal.abad_cal_state = CODE_ABAD_UNCALIBRATED;
 
   /* commutation encoder setup */

@@ -16,11 +16,14 @@
 #include <string.h>
 
 /* Forward declarations */
-static void abad_cal_collect_transitions(FSMStruct * fsmstate);
-static void abad_cal_probe_direction(FSMStruct * fsmstate);
-static void abad_cal_build_map(FSMStruct * fsmstate);
-static void abad_cal_align_zero(FSMStruct * fsmstate);
-static int abad_identify_magnet(int sensor_id, int hall_input);
+static void abad_cal_find_bottom_sensor(FSMStruct * fsmstate);
+static void abad_cal_find_zero(FSMStruct * fsmstate);
+static void abad_cal_center_sample_reverse(FSMStruct * fsmstate);
+static void abad_cal_center_zero(FSMStruct * fsmstate);
+static void abad_cal_fail(FSMStruct * fsmstate, const char *message);
+static int abad_calibration_direction(void);
+static uint8_t abad_bottom_sensor_id(void);
+static const char *abad_phase_name(uint8_t phase);
 
 float abad_controller_to_joint_angle(float controller_angle){
     while(controller_angle > PI_F){
@@ -56,29 +59,31 @@ uint8_t abad_joint_angle_in_limits(float joint_angle){
     return (joint_angle >= ABAD_LIMIT_MIN_RAD && joint_angle <= ABAD_LIMIT_MAX_RAD);
 }
 
-/* Calibration phase state machine */
-static uint8_t abad_cal_phase = ABAD_CAL_PHASE_COLLECT_TRANSITIONS;
-static int effective_abad_cal_dir = 1;  // Effective calibration direction during collection/alignment
+/* Calibration state */
+static uint8_t abad_cal_phase = ABAD_CAL_PHASE_FIND_BOTTOM_SENSOR;
+static int abad_motion_dir = 1;
+static uint8_t abad_bottom_sensor = 0;
+static float abad_phase_start_joint = 0.0f;
+static uint8_t abad_last_logged_phase = 0xFF;
+static uint16_t abad_phase_log_div = 0;
+static uint8_t abad_zero_window_started = 0;
+static float abad_zero_window_entry = 0.0f;
+static float abad_zero_window_exit = 0.0f;
+static float abad_zero_target = 0.0f;
+static uint16_t abad_center_settle_count = 0;
+static uint8_t abad_prev_both_active = 0;
+static float abad_center_trigger_forward = 0.0f;
+static float abad_center_trigger_reverse = 0.0f;
+static uint8_t abad_center_reverse_armed = 0;
 
-/* Active probe state for startup direction detection */
-static uint8_t abad_probe_cycle_count = 0;
-static uint8_t abad_probe_attempt_count = 0;
-static uint8_t abad_probe_initial_transition_count = 0;
-static uint8_t abad_probe_seen_edge = 0;  // Edge detected directly during probe phase
-static int abad_probe_dir = 1;
-
-/* Transition history for position map */
-typedef struct {
-    int sensor_id;        // 0=A, 1=B
-    int magnet_id;        // 0=M1, 1=M2, 2=M3, 3=M4
-    float recorded_theta; // mechanical angle at transition
-} TransitionRecord;
-
-static TransitionRecord transitions[8]; // Up to 4 per sensor
-static uint8_t transition_idx = 0;
-
-// Helper macro to convert degrees to radians
-#define DEG_TO_RAD(deg) ((deg) * PI_F / 180.0f)
+#define ABAD_CENTER_KP              0.4f
+#define ABAD_CENTER_MAX_STEP_SCALE  0.35f
+#define ABAD_CENTER_MIN_STEP_SCALE  0.05f
+#define ABAD_CENTER_SETTLE_CYCLES   40
+#define ABAD_CENTER_OVERTRAVEL_DEG  15.0f
+#define ABAD_CENTER_OVERTRAVEL_RAD  (ABAD_CENTER_OVERTRAVEL_DEG * PI_F / 180.0f)
+#define ABAD_CENTER_FINAL_TOL_DEG   1.0f
+#define ABAD_CENTER_FINAL_TOL_RAD   (ABAD_CENTER_FINAL_TOL_DEG * PI_F / 180.0f)
 
 uint8_t abad_sensor_a_active(void) {
     return HAL_GPIO_ReadPin(HALL_A_IO) == 0;  // Active low (0 = magnet detected)
@@ -93,358 +98,255 @@ uint8_t abad_sensor_b_active(void) {
  * Main calibration state machine - runs every interrupt cycle
  */
 void abad_hall_calibrate(FSMStruct * fsmstate) {
-    if (abad_cal.abad_cal_state == CODE_ABAD_UNCALIBRATED || 
+    if (abad_cal.abad_cal_state == CODE_ABAD_UNCALIBRATED ||
         abad_cal.abad_cal_state >= CODE_ABAD_CAL_SUCCESS) {
-        return;  // Not in calibration state
-    }
-
-    // Verify motor is configured for AB/AD operation
-    if (MOTOR_POSITION == MOTOR_POS_HIP) {
-        printf("Error: Motor configured as HIP, cannot run AB/AD calibration\r\n");
-        abad_cal.abad_cal_state = CODE_ABAD_CAL_FAIL;
-        fsmstate->next_state = MENU_MODE;
         return;
     }
 
-    // Read both sensors
+    if (MOTOR_POSITION == MOTOR_POS_HIP) {
+        abad_cal_fail(fsmstate, "AB/AD calibration failed - motor configured as HIP");
+        return;
+    }
+
     abad_cal.hall_a_input = HAL_GPIO_ReadPin(HALL_A_IO);
     abad_cal.hall_b_input = HAL_GPIO_ReadPin(HALL_B_IO);
 
     float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
 
-    // Phase 0: Probe direction at startup
-    if (abad_cal_phase == ABAD_CAL_PHASE_PROBE_DIRECTION) {
-        abad_cal_probe_direction(fsmstate);
-    }
-    // Phase 1: Collect transitions from both sensors
-    else if (abad_cal_phase == ABAD_CAL_PHASE_COLLECT_TRANSITIONS) {
-        // Check for safe-window violation only after direction has been selected
-        if ((effective_abad_cal_dir == 1 && joint_theta >= ABAD_SAFE_MAX_RAD) ||
-            (effective_abad_cal_dir == -1 && joint_theta <= ABAD_SAFE_MIN_RAD)) {
-            abad_cal.abad_cal_state = CODE_ABAD_CAL_FAIL;
-            fsmstate->next_state = MENU_MODE;
-            printf("\r\nAB/AD Calibration FAILED - exceeded safe travel range\r\n");
-            return;
-        }
-        abad_cal_collect_transitions(fsmstate);
-    }
-    // Phase 2: Build position map from collected transitions
-    else if (abad_cal_phase == ABAD_CAL_PHASE_MAP_POSITIONS) {
-        abad_cal_build_map(fsmstate);
-    }
-    // Phase 3: Align to zero and complete
-    else if (abad_cal_phase == ABAD_CAL_PHASE_ALIGN_ZERO) {
-        abad_cal_align_zero(fsmstate);
+    uint8_t log_phase_status = 0;
+    abad_phase_log_div++;
+    if ((abad_last_logged_phase != abad_cal_phase) || (abad_phase_log_div >= 4000)) {
+        log_phase_status = 1;
+        abad_phase_log_div = 0;
+        abad_last_logged_phase = abad_cal_phase;
     }
 
-    // Store preinput for next cycle edge detection
+    if (log_phase_status) {
+                float enc_frame_angle_deg = joint_theta * 180.0f / PI_F;
+                float delta_from_start_deg = abad_controller_to_joint_angle(joint_theta - abad_phase_start_joint) * 180.0f / PI_F;
+                printf("[ABAD CAL] Phase: %s | DeltaFromStart: %.2f deg | EncFrame: %.2f deg | A_active=%d B_active=%d | BottomTransitions=%u\r\n",
+               abad_phase_name(abad_cal_phase),
+                             (double)delta_from_start_deg,
+                             (double)enc_frame_angle_deg,
+               (int)(abad_cal.hall_a_input == 0),
+               (int)(abad_cal.hall_b_input == 0),
+               (unsigned)abad_cal.bottom_transition_count);
+    }
+
+    if (abad_cal_phase == ABAD_CAL_PHASE_FIND_BOTTOM_SENSOR) {
+        abad_cal_find_bottom_sensor(fsmstate);
+    } else if (abad_cal_phase == ABAD_CAL_PHASE_FIND_ZERO) {
+        abad_cal_find_zero(fsmstate);
+    } else if (abad_cal_phase == ABAD_CAL_PHASE_CENTER_SAMPLE_REVERSE) {
+        abad_cal_center_sample_reverse(fsmstate);
+    } else if (abad_cal_phase == ABAD_CAL_PHASE_CENTER_ZERO) {
+        abad_cal_center_zero(fsmstate);
+    }
+
     abad_cal.hall_a_preinput = abad_cal.hall_a_input;
     abad_cal.hall_b_preinput = abad_cal.hall_b_input;
 }
 
-/* Reset internal calibration state so AB/AD calibration starts cleanly. */
 void abad_cal_reset(void){
-    transition_idx = 0;
-    memset(transitions, 0, sizeof(transitions));
-    abad_cal.transition_count = 0;
+    // Force a fresh encoder sample so calibration starts from the live position,
+    // even if the motor was manually moved while not commutating.
+    ps_sample(&comm_encoder, DT);
+    controller.theta_mech = comm_encoder.angle_multiturn[0] / GR;
+
     abad_cal.hall_a_input = HAL_GPIO_ReadPin(HALL_A_IO);
     abad_cal.hall_b_input = HAL_GPIO_ReadPin(HALL_B_IO);
     abad_cal.hall_a_preinput = abad_cal.hall_a_input;
     abad_cal.hall_b_preinput = abad_cal.hall_b_input;
     abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(abad_controller_to_joint_angle(controller.theta_mech));
-    abad_cal.current_angle_estimate = abad_controller_to_joint_angle(controller.theta_mech);
-    abad_cal_phase = ABAD_CAL_PHASE_PROBE_DIRECTION;
-    abad_probe_cycle_count = 0;
-    abad_probe_attempt_count = 0;
-    abad_probe_initial_transition_count = 0;
-    abad_probe_seen_edge = 0;
+    abad_cal.abad_present_pos = abad_controller_to_joint_angle(controller.theta_mech);
+    abad_cal.bottom_transition_count = 0;
 
-    // Initialize probe direction from configured direction + motor orientation
-    abad_probe_dir = ABAD_CAL_DIR;
-    if (MOTOR_POSITION == MOTOR_POS_ABAD_FR_RL) {
-        abad_probe_dir = -ABAD_CAL_DIR;
-    }
+    abad_cal_phase = ABAD_CAL_PHASE_FIND_BOTTOM_SENSOR;
+    abad_motion_dir = abad_calibration_direction();
+    abad_bottom_sensor = abad_bottom_sensor_id();
+    abad_phase_start_joint = abad_cal.abad_present_pos;
+    controller.p_des = abad_cal.abad_cal_pcmd;
+    abad_last_logged_phase = 0xFF;
+    abad_phase_log_div = 0;
+    abad_zero_window_started = 0;
+    abad_zero_window_entry = 0.0f;
+    abad_zero_window_exit = 0.0f;
+    abad_zero_target = 0.0f;
+    abad_center_settle_count = 0;
+    abad_prev_both_active = (abad_sensor_a_active() && abad_sensor_b_active()) ? 1 : 0;
+    abad_center_trigger_forward = 0.0f;
+    abad_center_trigger_reverse = 0.0f;
+    abad_center_reverse_armed = 0;
 }
 
-/*
- * abad_cal_collect_transitions()
- * Phase 1: Rotate motor slowly and collect magnet transition positions
- */
-/*
- * abad_cal_probe_direction()
- * Phase 0: Active bidirectional probe to auto-select working direction
- * Tries configured direction first; if no transitions detected, tries opposite direction.
- */
-static void abad_cal_probe_direction(FSMStruct * fsmstate) {
-    // On first cycle of this phase, reset edge flag and print initial state
-    if (abad_probe_cycle_count == 0) {
-        abad_probe_seen_edge = 0;
-        printf("AB/AD Cal: probing direction (dir=%d, attempt=%d)...\r\n", abad_probe_dir, abad_probe_attempt_count + 1);
-        printf("AB/AD Cal: initial Hall A=%d B=%d\r\n",
-            (int)HAL_GPIO_ReadPin(HALL_A_IO), (int)HAL_GPIO_ReadPin(HALL_B_IO));
+static void abad_cal_find_bottom_sensor(FSMStruct * fsmstate) {
+    float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
+    float traveled_mech = fabsf(abad_controller_to_joint_angle(joint_theta - abad_phase_start_joint));
+    uint8_t bottom_active = (abad_bottom_sensor == 0) ? abad_sensor_a_active() : abad_sensor_b_active();
+
+    if (bottom_active) {
+        abad_cal_phase = ABAD_CAL_PHASE_FIND_ZERO;
+        abad_cal.bottom_transition_count = 0;
+        abad_phase_start_joint = joint_theta;
+        printf("AB/AD Cal: detected %s sensor, continuing toward zero\r\n",
+               abad_bottom_sensor == 0 ? "A(bottom)" : "B(bottom)");
+        return;
     }
 
-    // Detect edges directly (fix: transition_count is only updated in collect phase)
-    if ((abad_cal.hall_a_input != abad_cal.hall_a_preinput) ||
-        (abad_cal.hall_b_input != abad_cal.hall_b_preinput)) {
-        abad_probe_seen_edge = 1;
-        printf("AB/AD Cal: edge! A=%d->%d B=%d->%d cyc=%d\r\n",
-            (int)abad_cal.hall_a_preinput, (int)abad_cal.hall_a_input,
-            (int)abad_cal.hall_b_preinput, (int)abad_cal.hall_b_input,
-            (int)abad_probe_cycle_count);
+    if (traveled_mech >= ABAD_PROBE_TRAVEL_RAD) {
+        abad_cal_fail(fsmstate, "AB/AD calibration failed - bottom sensor not detected within 30 deg");
+        return;
     }
 
-    abad_probe_cycle_count++;
-
-    // Per-cycle observability (remove after bring-up)
-    printf("AB/AD probe cyc=%d dir=%d A=%d B=%d pcmd=%.2f\r\n",
-        (int)abad_probe_cycle_count, abad_probe_dir,
-        (int)abad_cal.hall_a_input, (int)abad_cal.hall_b_input,
-        (double)abad_cal.abad_cal_pcmd);
-
-    // After ABAD_PROBE_CYCLES, evaluate result
-    if (abad_probe_cycle_count > ABAD_PROBE_CYCLES) {
-        if (abad_probe_seen_edge) {
-            printf("AB/AD Cal: direction confirmed (dir=%d)\r\n", abad_probe_dir);
-            effective_abad_cal_dir = abad_probe_dir;
-            abad_cal_phase = ABAD_CAL_PHASE_COLLECT_TRANSITIONS;
-            abad_probe_cycle_count = 0;
-            abad_probe_seen_edge = 0;
-            return;
-        } else if (abad_probe_attempt_count == 0) {
-            // Try opposite direction
-            abad_probe_dir = -abad_probe_dir;
-            abad_probe_cycle_count = 0;
-            abad_probe_seen_edge = 0;
-            abad_probe_attempt_count = 1;
-            printf("AB/AD Cal: no transitions, trying opposite direction (dir=%d)...\r\n", abad_probe_dir);
-        } else {
-            // Both directions failed
-            printf("AB/AD Cal: probe failed - no hall transitions detected in either direction\r\n");
-            printf("AB/AD Cal: final Hall A=%d B=%d\r\n",
-                (int)HAL_GPIO_ReadPin(HALL_A_IO), (int)HAL_GPIO_ReadPin(HALL_B_IO));
-            abad_cal.abad_cal_state = CODE_ABAD_CAL_FAIL;
-            fsmstate->next_state = MENU_MODE;
-            return;
-        }
-    }
-
-    // Continue probing motion
+    float step = ABAD_CAL_SPEED * DT;
     float joint_pcmd = abad_controller_to_joint_angle(abad_cal.abad_cal_pcmd);
-    joint_pcmd = joint_pcmd + abad_probe_dir * ABAD_PROBE_STEP_RAD;
+    joint_pcmd += abad_motion_dir * step;
     joint_pcmd = abad_clamp_joint_angle(joint_pcmd);
     abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_pcmd);
     controller.p_des = abad_cal.abad_cal_pcmd;
 }
 
-static void abad_cal_collect_transitions(FSMStruct * fsmstate) {
-    // Detect any transition from either sensor
-    if ((abad_cal.hall_a_input != abad_cal.hall_a_preinput) ||
-        (abad_cal.hall_b_input != abad_cal.hall_b_preinput)) {
-        
-        // Determine which sensor transitioned and record it
-        if (abad_cal.hall_a_input != abad_cal.hall_a_preinput) {
-            if (transition_idx < 8) {
-                transitions[transition_idx].sensor_id = 0;  // Sensor A
-                transitions[transition_idx].recorded_theta = controller.theta_mech;
-                // Determine magnet: transitioning to 0 = magnet entering, to 1 = exiting
-                transitions[transition_idx].magnet_id = abad_identify_magnet(0, abad_cal.hall_a_input);
-                transition_idx++;
-            }
-        }
+static void abad_cal_find_zero(FSMStruct * fsmstate) {
+    float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
+    uint8_t hall_a_active = abad_sensor_a_active();
+    uint8_t hall_b_active = abad_sensor_b_active();
+    uint8_t both_active = (hall_a_active && hall_b_active);
+    uint8_t bottom_transition = (abad_bottom_sensor == 0)
+        ? (abad_cal.hall_a_input != abad_cal.hall_a_preinput)
+        : (abad_cal.hall_b_input != abad_cal.hall_b_preinput);
 
-        if (abad_cal.hall_b_input != abad_cal.hall_b_preinput) {
-            if (transition_idx < 8) {
-                transitions[transition_idx].sensor_id = 1;  // Sensor B
-                transitions[transition_idx].recorded_theta = controller.theta_mech;
-                transitions[transition_idx].magnet_id = abad_identify_magnet(1, abad_cal.hall_b_input);
-                transition_idx++;
-            }
+    if (bottom_transition) {
+        abad_cal.bottom_transition_count++;
+        printf("AB/AD Cal: bottom sensor transition %u\r\n", (unsigned)abad_cal.bottom_transition_count);
+        if (abad_cal.bottom_transition_count > ABAD_MAX_BOTTOM_TRANSITIONS) {
+            abad_cal_fail(fsmstate, "AB/AD calibration failed - bottom sensor transitioned too many times before zero");
+            return;
         }
-
-        abad_cal.transition_count++;
     }
 
-    // Continue rotation: increment position command at calibration speed
+    if (!abad_prev_both_active && both_active) {
+        abad_center_trigger_forward = joint_theta;
+         abad_prev_both_active = both_active;
+         abad_center_reverse_armed = 0;
+        abad_cal_phase = ABAD_CAL_PHASE_CENTER_SAMPLE_REVERSE;
+         printf("AB/AD Cal: forward both-active trigger at %.2f deg, overtraveling %.2f deg before reverse\r\n",
+             (double)(abad_center_trigger_forward * 180.0f / PI_F),
+             (double)ABAD_CENTER_OVERTRAVEL_DEG);
+        return;
+    }
+    abad_prev_both_active = both_active;
+
     float joint_pcmd = abad_controller_to_joint_angle(abad_cal.abad_cal_pcmd);
-    joint_pcmd = joint_pcmd + effective_abad_cal_dir * (1.0f / 40000.0f) * ABAD_CAL_SPEED;
+    joint_pcmd += abad_motion_dir * DT * ABAD_CAL_SPEED;
     joint_pcmd = abad_clamp_joint_angle(joint_pcmd);
-
     abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_pcmd);
+    controller.p_des = abad_cal.abad_cal_pcmd;
+}
 
+static void abad_cal_center_sample_reverse(FSMStruct * fsmstate) {
+    float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
+    uint8_t both_active = abad_sensor_a_active() && abad_sensor_b_active();
+
+    if (!abad_center_reverse_armed) {
+        float forward_travel = fabsf(abad_controller_to_joint_angle(joint_theta - abad_center_trigger_forward));
+        if (forward_travel >= ABAD_CENTER_OVERTRAVEL_RAD) {
+            abad_motion_dir = -abad_motion_dir;
+            abad_center_reverse_armed = 1;
+            abad_prev_both_active = both_active;
+            printf("AB/AD Cal: overtravel complete (%.2f deg), reversing for second trigger\r\n",
+                   (double)(forward_travel * 180.0f / PI_F));
+        }
+    } else {
+        if (!abad_prev_both_active && both_active) {
+            float diff = abad_controller_to_joint_angle(joint_theta - abad_center_trigger_forward);
+            abad_center_trigger_reverse = joint_theta;
+            abad_zero_target = abad_controller_to_joint_angle(abad_center_trigger_forward + 0.5f * diff);
+            abad_cal_phase = ABAD_CAL_PHASE_CENTER_ZERO;
+            abad_center_settle_count = 0;
+            printf("AB/AD Cal: reverse both-active trigger at %.2f deg, center target %.2f deg\r\n",
+                   (double)(abad_center_trigger_reverse * 180.0f / PI_F),
+                   (double)(abad_zero_target * 180.0f / PI_F));
+            return;
+        }
+    }
+    abad_prev_both_active = both_active;
+
+    float joint_pcmd = abad_controller_to_joint_angle(abad_cal.abad_cal_pcmd);
+    joint_pcmd += abad_motion_dir * DT * ABAD_CAL_SPEED;
+    joint_pcmd = abad_clamp_joint_angle(joint_pcmd);
+    abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_pcmd);
     controller.p_des = abad_cal.abad_cal_pcmd;
 
-    // Transition to Phase 2 when we've collected at least 4 transitions
-    // (ideally 2 per sensor, or all 4 magnets crossed)
-    if (abad_cal.transition_count >= 4) {
-        abad_cal_phase = ABAD_CAL_PHASE_MAP_POSITIONS;
-        printf("AB/AD Cal: Collected %d transitions, building position map\r\n", abad_cal.transition_count);
+    // If we lose the expected trigger while reversing for too long, fail safely.
+    if (fabsf(abad_controller_to_joint_angle(joint_theta - abad_center_trigger_forward)) > ABAD_PROBE_TRAVEL_RAD) {
+        abad_cal_fail(fsmstate, "AB/AD calibration failed - reverse trigger not found within expected travel");
     }
 }
 
-/*
- * abad_cal_build_map()
- * Phase 2: From collected transitions, calculate position map
- */
-static void abad_cal_build_map(FSMStruct * fsmstate) {
-    // Initialize position map with collected data
-    // Map indices: 0=-90°, 1=-60°, 2=-30°, 3=0°, 4=+30°, 5=+60°, 6=+90°
+static void abad_cal_center_zero(FSMStruct * fsmstate) {
+    float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
+    float error = abad_controller_to_joint_angle(abad_zero_target - joint_theta);
+    uint8_t both_active = abad_sensor_a_active() && abad_sensor_b_active();
 
-    uint8_t found_zero = 0;
+    // Command the exact computed midpoint target each cycle.
+    abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(abad_zero_target);
+    controller.p_des = abad_cal.abad_cal_pcmd;
 
-    // Find A@M1 (0°) and B@M4 (0°) transitions to establish zero
-    for (uint8_t i = 0; i < transition_idx; i++) {
-        if (transitions[i].sensor_id == 0 && transitions[i].magnet_id == 0) {
-            // Sensor A detecting M1
-            found_zero = 1;
-            break;
-        }
+    if (fabsf(error) <= ABAD_CENTER_FINAL_TOL_RAD && both_active) {
+        abad_center_settle_count++;
+    } else {
+        abad_center_settle_count = 0;
     }
 
-    if (!found_zero) {
-        // If A@M1 not found, use B@M4
-        for (uint8_t i = 0; i < transition_idx; i++) {
-            if (transitions[i].sensor_id == 1 && transitions[i].magnet_id == 3) {
-                // Sensor B detecting M4
-                found_zero = 1;
-                break;
-            }
-        }
-    }
-
-    // Build position map by sorting transitions by magnet ID
-    // Expected order: M4(A)=-90°, M3(A)=-60°, M2(A)=-30°, M1(A)=0°,
-    //                 M4(B)=0°, M3(B)=+30°, M2(B)=+60°, M1(B)=+90°
-
-    // Initialize map
-    memset(abad_cal.position_map, 0, sizeof(abad_cal.position_map));
-
-    // Sort transitions and populate map
-    float magnet_angles[] = {-90.0f, -60.0f, -30.0f, 0.0f, 30.0f, 60.0f, 90.0f};
-    
-    for (uint8_t i = 0; i < ABAD_POSITION_MAP_SIZE; i++) {
-        abad_cal.position_map[i] = DEG_TO_RAD(magnet_angles[i]);
-    }
-
-    // Adjust map based on detected transitions to improve accuracy
-    for (uint8_t i = 0; i < transition_idx; i++) {
-        // Map each transition to its expected position
-        // Sensor A: M4=-90°, M3=-60°, M2=-30°, M1=0°
-        // Sensor B: M4=0°, M3=+30°, M2=+60°, M1=+90°
-        if (transitions[i].sensor_id == 0) {
-            // Sensor A
-            float expected_angle = 0.0f - (transitions[i].magnet_id + 1) * 30.0f;
-            abad_cal.position_map[ABAD_POS_M90 + transitions[i].magnet_id] = 
-                DEG_TO_RAD(expected_angle);
-        } else {
-            // Sensor B
-            float expected_angle = 0.0f + (3 - transitions[i].magnet_id) * 30.0f;
-            abad_cal.position_map[ABAD_POS_0 + (3 - transitions[i].magnet_id)] = 
-                DEG_TO_RAD(expected_angle);
-        }
-    }
-
-    abad_cal_phase = ABAD_CAL_PHASE_ALIGN_ZERO;
-    printf("AB/AD Cal: Position map built, aligning to zero\r\n");
-}
-
-/*
- * abad_cal_align_zero()
- * Phase 3: Move to zero position (A@M1 + B@M4) and establish zero reference
- */
-static void abad_cal_align_zero(FSMStruct * fsmstate) {
-    // Move to zero position using position control
-    // The zero position is where A@M1 = 0° and B@M4 = 0°
-
-    float target_position = abad_clamp_joint_angle(abad_cal.position_map[ABAD_POS_0]);
-    float current_position = abad_controller_to_joint_angle(controller.theta_mech);
-
-    // Check if we're close enough to zero (within ±5°)
-    float angle_error = fabsf(current_position - target_position);
-    if (angle_error > ABAD_CAL_ALIGN_TOL_RAD) {
-        // Continue moving toward zero
-        float joint_pcmd = abad_controller_to_joint_angle(abad_cal.abad_cal_pcmd);
-        if (current_position < target_position) {
-            joint_pcmd += 1.0f / 40000.0f * ABAD_CAL_SPEED;
-        } else {
-            joint_pcmd -= 1.0f / 40000.0f * ABAD_CAL_SPEED;
-        }
-
-        joint_pcmd = abad_clamp_joint_angle(joint_pcmd);
-        abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_pcmd);
-        
+    if (abad_center_settle_count >= ABAD_CENTER_SETTLE_CYCLES) {
+        abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_theta);
         controller.p_des = abad_cal.abad_cal_pcmd;
-    } else {
-        // We've reached zero - complete calibration
-        abad_cal.abad_cal_pcmd = 0.0f;
-        controller.p_des = 0.0f;
         abad_cal.abad_cal_state = CODE_ABAD_CAL_SUCCESS;
-        
-        // Set encoder zero reference
         abad_encoder_set_zero();
-        
-        // Transition to motor mode
         fsmstate->next_state = MOTOR_MODE;
-        printf("AB/AD Calibration SUCCESS\r\n");
+         printf("AB/AD Calibration SUCCESS - centered at %.2f deg (target %.2f deg, err %.2f deg)\r\n",
+             (double)(joint_theta * 180.0f / PI_F),
+             (double)(abad_zero_target * 180.0f / PI_F),
+             (double)(error * 180.0f / PI_F));
+        return;
     }
 }
 
-/*
- * abad_identify_magnet()
- * Determine which magnet is being detected based on sensor and transition direction
- * Returns magnet ID: 0=M1, 1=M2, 2=M3, 3=M4
- */
-static int abad_identify_magnet(int sensor_id, int hall_input) {
-    // This is a simplified version. In practice, you'd need to track
-    // the sequence of transitions to determine magnet ID.
-    // For now, return based on the transition pattern observed during rotation.
-    
-    // Assumes rotation direction known from ABAD_CAL_DIR
-    // and we can infer magnet sequence from transition order
-    
-    // Simplified: use transition count to estimate magnet
-    int magnet = (transition_idx / 2) % 4;
-    return magnet;
+static void abad_cal_fail(FSMStruct * fsmstate, const char *message) {
+    abad_cal.abad_cal_state = CODE_ABAD_CAL_FAIL;
+    controller.p_des = abad_joint_to_controller_angle(abad_controller_to_joint_angle(controller.theta_mech));
+    fsmstate->next_state = MENU_MODE;
+    printf("%s\r\n", message);
 }
 
-/*
- * abad_encoder_set_zero()
- * Establish mechanical zero for AB/AD axis
- */
+static int abad_calibration_direction(void) {
+    return (MOTOR_POSITION == MOTOR_POS_ABAD_FL_RR) ? -1 : 1;
+}
+
+static uint8_t abad_bottom_sensor_id(void) {
+    return (MOTOR_POSITION == MOTOR_POS_ABAD_FL_RR) ? 1 : 0;
+}
+
+static const char *abad_phase_name(uint8_t phase) {
+    switch (phase) {
+        case ABAD_CAL_PHASE_FIND_BOTTOM_SENSOR:
+            return "FIND_BOTTOM";
+        case ABAD_CAL_PHASE_FIND_ZERO:
+            return "FIND_ZERO";
+        case ABAD_CAL_PHASE_CENTER_SAMPLE_REVERSE:
+            return "CENTER_REV";
+        case ABAD_CAL_PHASE_CENTER_ZERO:
+            return "CENTER_ZERO";
+        default:
+            return "UNKNOWN";
+    }
+}
+
 void abad_encoder_set_zero(void) {
-    // Set the current mechanical position as zero reference
-    // Store this reference for future position readings
+	comm_encoder.m_zero = 0;
+	comm_encoder.first_sample = 0;
+	M_ZERO = comm_encoder.count;
+	ps_sample(&comm_encoder, DT);
     controller.theta_mech = 0.0f;
-    
     printf("AB/AD zero position set\r\n");
-}
-
-/*
- * abad_get_position()
- * Return current AB/AD position based on hall sensor readings
- */
-float abad_get_position(void) {
-    int hall_a = abad_sensor_a_active();
-    int hall_b = abad_sensor_b_active();
-
-    // Determine which magnet(s) are detected
-    // Sensor priority: use A if in negative region, B if positive
-    
-    float current_angle = 0.0f;
-
-    if (hall_a) {
-        // Sensor A active - in negative region (or at zero)
-        // Use sensor A readings for position
-        // This would need to map sensor state to position_map entry
-        current_angle = abad_cal.position_map[ABAD_POS_M30];  // Default: -30°
-    } else if (hall_b) {
-        // Sensor B active - in positive region (or at zero)
-        current_angle = abad_cal.position_map[ABAD_POS_P30];  // Default: +30°
-    } else {
-        // No magnet detected - return last known position
-        current_angle = abad_cal.current_angle_estimate;
-    }
-
-    abad_cal.current_angle_estimate = current_angle;
-    return current_angle;
 }

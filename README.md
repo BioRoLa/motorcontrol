@@ -74,7 +74,7 @@ The control flow is interrupt-driven and state-machine controlled.
   - `ENCODER_MODE`
   - `ENCODER_CALIBRATE`
   - `HALL_CALIBRATE`
-- `HALL_DEBUG_MODE`
+  - `HALL_DEBUG_MODE`
   - `ABAD_CALIBRATE`
 
 ## Calibration control logic
@@ -175,7 +175,7 @@ High-level menu commands in `fsm.h`:
 - `s`: setup mode
 - `z`: set encoder zero
 - `h`: hall calibration mode
-- `x`: hall sensor debug mode (raw + active prints for HIP/A/B halls)
+- `q`: hall sensor debug mode (raw + active prints for HIP/A/B halls)
 - `a`: AB/AD hall calibration mode
 - `ESC` (`27`): return to menu from active mode
 
@@ -287,7 +287,7 @@ Reserved/unused in UART setup parser:
 	m - Motor Mode
 	c - Calibrate Encoder
    h - Hall Calibration
-   x - Hall Sensor Debug
+   q - Hall Sensor Debug
    a - AB/AD Hall Calibration
 	s - Setup
 	e - Display Encoder
@@ -368,13 +368,28 @@ Startup probe and reset behavior:
 
 ### Hall debug mode
 
-- Enter from menu with `x`.
+- Enter from menu with `q`.
 - Prints raw hall values and derived active state (`active = raw == 0`) for:
   - HIP hall (`PC6`)
   - AB/AD Hall A (`PB14`)
   - AB/AD Hall B (`PB15`)
 - Prints immediate edge transitions (`prev -> new`) when any hall input changes.
 - Mode is non-driving for safe manual magnet/wiring bring-up. Press `ESC` to return to menu.
+
+#### Hall debug bring-up checklist
+
+1. Power on, open UART, and enter hall debug mode with `q`.
+2. Verify idle values first:
+   - Expected raw values are typically `1 1 1` (HIP, A, B) when no magnet is over a sensor.
+   - Expected active values are `0 0 0` at idle because active is defined as `raw == 0`.
+3. Move a magnet over each sensor one-by-one:
+   - Raw value for that sensor should toggle `1 -> 0` near the detection zone.
+   - Active value for that sensor should toggle `0 -> 1` at the same moment.
+   - UART should print an edge line for each transition.
+4. Sweep through the full mechanical range slowly and confirm repeated transitions:
+   - AB/AD axis should show A/B edges near expected magnet locations.
+   - If no edges appear in sweep, calibration will fail in probe phase.
+5. Press `ESC` to return to menu and then run AB/AD calibration (`a`) once transitions are confirmed.
 
 ## Motor breakout pinout (motor driver)
 
