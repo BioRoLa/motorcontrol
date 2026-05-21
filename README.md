@@ -18,8 +18,7 @@ This repo targets STM32CubeIDE-generated projects and is designed for practical 
 2. Open a UART terminal and confirm the menu prints.
 3. Enter setup mode (`s`) and verify key parameters (current limits, gains, CAN IDs).
 4. Run needed calibration:
-   - hip hall: `h`
-   - AB/AD hall: `a`
+   - hall calibration: `h` (auto-selects HIP vs AB/AD from `MOTOR_POSITION`)
 5. Enter motor mode (`m`) and begin command testing.
 
 ## Hardware + Toolchain
@@ -119,47 +118,28 @@ Implemented in `abad_calibration.c` (`abad_hall_calibrate`) using two binary hal
 
 Control sequence:
 
-1. FSM enters `ABAD_CALIBRATE`, sets AB/AD PID gains (`ABAD_CAL_KP/KI/KD`), and records start position.
-2. Calibration first validates motor role:
-   - AB/AD mode is only allowed when `MOTOR_POSITION != MOTOR_POS_HIP`.
-3. Effective calibration direction is derived from:
-   - `ABAD_CAL_DIR`
-   - motor orientation role (`MOTOR_POS_ABAD_FL_RR` vs `MOTOR_POS_ABAD_FR_RL`)
-4. Run a three-phase calibration state machine:
-   - collect transitions (`ABAD_CAL_PHASE_COLLECT_TRANSITIONS`)
-   - build position map (`ABAD_CAL_PHASE_MAP_POSITIONS`)
-   - align to zero (`ABAD_CAL_PHASE_ALIGN_ZERO`)
-5. During collection:
-   - detect A/B sensor edges
-   - record transition angle and sensor source
-   - continue commanded motion at `ABAD_CAL_SPEED`
-6. Build a 7-point position map around expected AB/AD bins (from negative to positive angles) and estimate zero bin.
-7. Align to zero target and finish:
-   - set success code
+1. Enter Hall Calibration (`h`) from menu.
+2. FSM routes automatically:
+   - `MOTOR_POSITION == MOTOR_POS_HIP` -> `HALL_CALIBRATE`
+   - otherwise -> `ABAD_CALIBRATE`
+3. AB/AD calibration validates motor role (must not be HIP).
+4. `FIND_BOTTOM_SENSOR`:
+   - move in configured AB/AD direction
+   - require expected bottom sensor detection within `ABAD_PROBE_TRAVEL_DEG`
+5. `FIND_ZERO`:
+   - continue moving until first `A && B` trigger (forward trigger sample)
+6. `CENTER_SAMPLE_REVERSE`:
+   - overtravel a few degrees
+   - reverse direction
+   - capture second `A && B` trigger (reverse trigger sample)
+7. `CENTER_ZERO`:
+   - compute midpoint between forward/reverse trigger samples
+   - command target to that midpoint and settle
+8. On success:
    - call `abad_encoder_set_zero`
-   - transition to motor mode
-8. Safety constraint:
-   - calibration is bounded by safe AB/AD travel window; exceeding window triggers fail and menu return.
+   - transition to `MOTOR_MODE`
 
-Key idea: AB/AD uses sensor transition mapping across two hall sensors rather than a single-window midpoint estimate.
-
-```text
-AB/AD calibration (dual sensor, phased)
-
-MENU_MODE --(a)--> ABAD_CALIBRATE
-ABAD_CALIBRATE:
-   phase 0: active direction probe
-         -> phase 1: collect A/B transitions
-         -> phase 2: build position map
-         -> phase 3: align to zero
-			-> SUCCESS: abad_encoder_set_zero -> MOTOR_MODE
-
-	Guardrails:
-		- motor role must be AB/AD (not HIP)
-		- direction adjusted by motor position role
-		- safe travel bound enforced during calibration
-		- on any violation: FAIL -> MENU_MODE
-```
+Key idea: AB/AD zero is centered from two-direction trigger samples of the same overlap window.
 
 ## Interfaces
 
@@ -176,7 +156,6 @@ High-level menu commands in `fsm.h`:
 - `z`: set encoder zero
 - `h`: hall calibration mode
 - `q`: hall sensor debug mode (raw + active prints for HIP/A/B halls)
-- `a`: AB/AD hall calibration mode
 - `ESC` (`27`): return to menu from active mode
 
 ### UART parser behavior
@@ -288,7 +267,6 @@ Reserved/unused in UART setup parser:
 	c - Calibrate Encoder
    h - Hall Calibration
    q - Hall Sensor Debug
-   a - AB/AD Hall Calibration
 	s - Setup
 	e - Display Encoder
 	z - Set Zero Position
@@ -307,6 +285,10 @@ I_MAX set to 40.000000
 
 > <ESC>
 <returns to menu>
+
+Calibration command note:
+
+- Use `h` only. Calibration type is auto-selected from `MOTOR_POSITION`.
 ```
 
 ## CAN
