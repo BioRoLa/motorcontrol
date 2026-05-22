@@ -353,9 +353,9 @@ extern "C" {
 #define MAX_MOTOR_POSITION     	2
 
 /* Motor position/role definitions */
-#define MOTOR_POS_HIP           0  // Hip flexion/extension
-#define MOTOR_POS_ABAD_FL_RR    1  // AB/AD for Front-Left or Rear-Right
-#define MOTOR_POS_ABAD_FR_RL    2  // AB/AD for Front-Right or Rear-Left
+#define MOTOR_POS_HIP             0  // Hip flexion/extension
+#define MOTOR_POS_ABAD_NORMAL     1  // AB/AD normal orientation (Front Left & Rear Right Position)
+#define MOTOR_POS_ABAD_MIRRORED   2  // AB/AD mirrored orientation (Front Right & Rear Left Position)
 
 
 #define PHASE_ORDER             __int_reg[ADDR_PHASE_ORDER]         // Phase swapping during calibration
@@ -367,7 +367,7 @@ extern "C" {
 #define HALL_CAL_DIR            __int_reg[ADDR_HALL_CAL_DIR]
 #define ABAD_CAL_DIR            __int_reg[ADDR_ABAD_CAL_DIR]
 #define ENCODER_LUT             __int_reg[ADDR_ENCODER_LUT]         // Encoder offset LUT - 128 elements long
-#define MOTOR_POSITION          __int_reg[ADDR_MOTOR_POSITION]      // Motor position/role (HIP, ABAD_FL/RR, ABAD_FR/RL)
+#define MOTOR_POSITION          __int_reg[ADDR_MOTOR_POSITION]      // Motor position/role (HIP, ABAD_NORMAL, ABAD_MIRRORED)
 
 
 #define STR_INVALID_VALUE		"Not a valid value\r\n"

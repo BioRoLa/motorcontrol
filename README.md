@@ -219,40 +219,40 @@ If any setup-menu printout and command table ever disagree, treat the `CMD_*` ma
 
 The table below lists all register prefixes that are writable over UART (`CMD_* != ' '`).
 
-| Prefix | Register          | Type  | Notes                                            |
-| ------ | ----------------- | ----- | ------------------------------------------------ |
-| `a`    | `I_CAL`           | float | Calibration current                              |
-| `b`    | `I_BW`            | float | Current loop bandwidth                           |
-| `c`    | `I_MAX_CONT`      | float | Continuous current limit                         |
-| `d`    | `KD_MAX`          | float | Max velocity gain                                |
-| `e`    | `HALL_CAL_OFFSET` | float | Hall calibration offset                          |
-| `f`    | `I_FW_MAX`        | float | Field-weakening current limit                    |
-| `g`    | `GR`              | float | Gear ratio                                       |
-| `h`    | `HALL_CAL_SPEED`  | float | Hall calibration speed                           |
-| `i`    | `KI_MAX`          | float | Max integral gain                                |
-| `k`    | `KP_MAX`          | float | Max position gain                                |
-| `l`    | `I_MAX`           | float | Current limit                                    |
-| `n`    | `CAN_ID`          | int   | CAN node ID                                      |
-| `m`    | `CAN_MASTER`      | int   | CAN master/controller ID                         |
-| `o`    | `CAN_TIMEOUT`     | int   | CAN timeout cycles                               |
-| `p`    | `P_MAX`           | float | Max position setpoint                            |
-| `P`    | `MOTOR_POSITION`  | int   | Motor role (`0=HIP, 1=FL/RR, 2=FR/RL`)           |
-| `r`    | `HALL_CAL_DIR`    | int   | Hall calibration direction (`-1` or `1`)         |
-| `R`    | `ABAD_CAL_DIR`    | int   | AB/AD calibration direction (`-1` or `1`)        |
-| `t`    | `KT`              | float | Torque constant                                  |
-| `v`    | `V_MAX`           | float | Max velocity setpoint (also sets `V_MIN=-V_MAX`) |
-| `T`    | `T_MAX`           | float | Max torque setpoint (also sets `T_MIN=-T_MAX`)   |
-| `D`    | `HALL_CAL_KD`     | float | Hall calibration derivative gain                 |
-| `I`    | `HALL_CAL_KI`     | float | Hall calibration integral gain                   |
-| `J`    | `ABAD_CAL_KP`     | float | AB/AD calibration proportional gain              |
-| `K`    | `HALL_CAL_KP`     | float | Hall calibration proportional gain               |
-| `O`    | `ABAD_CAL_OFFSET` | float | AB/AD calibration offset                         |
-| `S`    | `ABAD_CAL_SPEED`  | float | AB/AD calibration speed                          |
-| `U`    | `ABAD_CAL_KI`     | float | AB/AD calibration integral gain                  |
-| `V`    | `ABAD_CAL_KD`     | float | AB/AD calibration derivative gain                |
-| `X`    | `MOTOR_MODE_KP`   | float | Default motor-mode proportional gain             |
-| `Y`    | `MOTOR_MODE_KI`   | float | Default motor-mode integral gain                 |
-| `Z`    | `MOTOR_MODE_KD`   | float | Default motor-mode derivative gain               |
+| Prefix | Register          | Type  | Notes                                                |
+| ------ | ----------------- | ----- | ---------------------------------------------------- |
+| `a`    | `I_CAL`           | float | Calibration current                                  |
+| `b`    | `I_BW`            | float | Current loop bandwidth                               |
+| `c`    | `I_MAX_CONT`      | float | Continuous current limit                             |
+| `d`    | `KD_MAX`          | float | Max velocity gain                                    |
+| `e`    | `HALL_CAL_OFFSET` | float | Hall calibration offset                              |
+| `f`    | `I_FW_MAX`        | float | Field-weakening current limit                        |
+| `g`    | `GR`              | float | Gear ratio                                           |
+| `h`    | `HALL_CAL_SPEED`  | float | Hall calibration speed                               |
+| `i`    | `KI_MAX`          | float | Max integral gain                                    |
+| `k`    | `KP_MAX`          | float | Max position gain                                    |
+| `l`    | `I_MAX`           | float | Current limit                                        |
+| `n`    | `CAN_ID`          | int   | CAN node ID                                          |
+| `m`    | `CAN_MASTER`      | int   | CAN master/controller ID                             |
+| `o`    | `CAN_TIMEOUT`     | int   | CAN timeout cycles                                   |
+| `p`    | `P_MAX`           | float | Max position setpoint                                |
+| `P`    | `MOTOR_POSITION`  | int   | Motor role (`0=HIP, 1=ABAD_NORMAL, 2=ABAD_MIRRORED`) |
+| `r`    | `HALL_CAL_DIR`    | int   | Hall calibration direction (`-1` or `1`)             |
+| `R`    | `ABAD_CAL_DIR`    | int   | AB/AD calibration direction (`-1` or `1`)            |
+| `t`    | `KT`              | float | Torque constant                                      |
+| `v`    | `V_MAX`           | float | Max velocity setpoint (also sets `V_MIN=-V_MAX`)     |
+| `T`    | `T_MAX`           | float | Max torque setpoint (also sets `T_MIN=-T_MAX`)       |
+| `D`    | `HALL_CAL_KD`     | float | Hall calibration derivative gain                     |
+| `I`    | `HALL_CAL_KI`     | float | Hall calibration integral gain                       |
+| `J`    | `ABAD_CAL_KP`     | float | AB/AD calibration proportional gain                  |
+| `K`    | `HALL_CAL_KP`     | float | Hall calibration proportional gain                   |
+| `O`    | `ABAD_CAL_OFFSET` | float | AB/AD calibration offset                             |
+| `S`    | `ABAD_CAL_SPEED`  | float | AB/AD calibration speed                              |
+| `U`    | `ABAD_CAL_KI`     | float | AB/AD calibration integral gain                      |
+| `V`    | `ABAD_CAL_KD`     | float | AB/AD calibration derivative gain                    |
+| `X`    | `MOTOR_MODE_KP`   | float | Default motor-mode proportional gain                 |
+| `Y`    | `MOTOR_MODE_KI`   | float | Default motor-mode integral gain                     |
+| `Z`    | `MOTOR_MODE_KD`   | float | Default motor-mode derivative gain                   |
 
 Reserved/unused in UART setup parser:
 
@@ -331,8 +331,8 @@ Sensor pins (default):
 Motor role selection is runtime-configurable:
 
 - `MOTOR_POS_HIP`
-- `MOTOR_POS_ABAD_FL_RR`
-- `MOTOR_POS_ABAD_FR_RL`
+- `MOTOR_POS_ABAD_NORMAL`
+- `MOTOR_POS_ABAD_MIRRORED`
 
 This allows orientation-dependent direction handling without forking firmware per leg.
 

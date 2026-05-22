@@ -320,11 +320,11 @@ static void abad_cal_fail(FSMStruct * fsmstate, const char *message) {
 }
 
 static int abad_calibration_direction(void) {
-    return (MOTOR_POSITION == MOTOR_POS_ABAD_FL_RR) ? -1 : 1;
+    return (MOTOR_POSITION == MOTOR_POS_ABAD_NORMAL) ? -1 : 1;
 }
 
 static uint8_t abad_bottom_sensor_id(void) {
-    return (MOTOR_POSITION == MOTOR_POS_ABAD_FL_RR) ? 1 : 0;
+    return (MOTOR_POSITION == MOTOR_POS_ABAD_NORMAL) ? 1 : 0;
 }
 
 static const char *abad_phase_name(uint8_t phase) {
