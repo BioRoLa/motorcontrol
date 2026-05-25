@@ -347,7 +347,7 @@ extern "C" {
 #define MAX_ENCODER_LUT        	GLOBAL_MAX_VALUE
 
 #define NAME_MOTOR_POSITION     "MOTOR_POSITION"
-#define ADDR_MOTOR_POSITION     9
+#define ADDR_MOTOR_POSITION     136
 #define CMD_MOTOR_POSITION     	'P'
 #define MIN_MOTOR_POSITION     	0
 #define MAX_MOTOR_POSITION     	2
@@ -366,7 +366,7 @@ extern "C" {
 #define E_ZERO					__int_reg[ADDR_E_ZERO]
 #define HALL_CAL_DIR            __int_reg[ADDR_HALL_CAL_DIR]
 #define ABAD_CAL_DIR            __int_reg[ADDR_ABAD_CAL_DIR]
-#define ENCODER_LUT             __int_reg[ADDR_ENCODER_LUT]         // Encoder offset LUT - 128 elements long
+#define ENCODER_LUT             __int_reg[ADDR_ENCODER_LUT]         // Encoder offset LUT spans int regs [8..135]
 #define MOTOR_POSITION          __int_reg[ADDR_MOTOR_POSITION]      // Motor position/role (HIP, ABAD_NORMAL, ABAD_MIRRORED)
 
 
