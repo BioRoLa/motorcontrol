@@ -75,6 +75,7 @@ static uint8_t abad_prev_both_active = 0;
 static float abad_center_trigger_forward = 0.0f;
 static float abad_center_trigger_reverse = 0.0f;
 static uint8_t abad_center_reverse_armed = 0;
+static uint32_t abad_center_zero_cycles = 0;
 
 #define ABAD_CENTER_KP              0.4f
 #define ABAD_CENTER_MAX_STEP_SCALE  0.35f
@@ -84,6 +85,7 @@ static uint8_t abad_center_reverse_armed = 0;
 #define ABAD_CENTER_OVERTRAVEL_RAD  (ABAD_CENTER_OVERTRAVEL_DEG * PI_F / 180.0f)
 #define ABAD_CENTER_FINAL_TOL_DEG   1.0f
 #define ABAD_CENTER_FINAL_TOL_RAD   (ABAD_CENTER_FINAL_TOL_DEG * PI_F / 180.0f)
+#define ABAD_CENTER_ZERO_TIMEOUT_CYCLES 40000U
 
 uint8_t abad_sensor_a_active(void) {
     return HAL_GPIO_ReadPin(HALL_A_IO) == 0;  // Active low (0 = magnet detected)
@@ -177,6 +179,7 @@ void abad_cal_reset(void){
     abad_center_trigger_forward = 0.0f;
     abad_center_trigger_reverse = 0.0f;
     abad_center_reverse_armed = 0;
+    abad_center_zero_cycles = 0;
 }
 
 static void abad_cal_find_bottom_sensor(FSMStruct * fsmstate) {
@@ -263,6 +266,7 @@ static void abad_cal_center_sample_reverse(FSMStruct * fsmstate) {
             abad_zero_target = abad_controller_to_joint_angle(abad_center_trigger_forward + 0.5f * diff);
             abad_cal_phase = ABAD_CAL_PHASE_CENTER_ZERO;
             abad_center_settle_count = 0;
+                 abad_center_zero_cycles = 0;
             printf("AB/AD Cal: reverse both-active trigger at %.2f deg, center target %.2f deg\r\n",
                    (double)(abad_center_trigger_reverse * 180.0f / PI_F),
                    (double)(abad_zero_target * 180.0f / PI_F));
@@ -287,10 +291,24 @@ static void abad_cal_center_zero(FSMStruct * fsmstate) {
     float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
     float error = abad_controller_to_joint_angle(abad_zero_target - joint_theta);
     uint8_t both_active = abad_sensor_a_active() && abad_sensor_b_active();
+    float step = ABAD_CAL_SPEED * DT;
+    float joint_pcmd = abad_controller_to_joint_angle(abad_cal.abad_cal_pcmd);
 
-    // Command the exact computed midpoint target each cycle.
-    abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(abad_zero_target);
+    // Slew toward the computed midpoint at the configured calibration speed.
+    if (fabsf(error) > step) {
+        joint_pcmd += (error > 0.0f) ? step : -step;
+        joint_pcmd = abad_clamp_joint_angle(joint_pcmd);
+        abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_pcmd);
+    } else {
+        abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_theta);
+    }
     controller.p_des = abad_cal.abad_cal_pcmd;
+
+    abad_center_zero_cycles++;
+    if (abad_center_zero_cycles > ABAD_CENTER_ZERO_TIMEOUT_CYCLES) {
+        abad_cal_fail(fsmstate, "AB/AD calibration failed - center approach timeout");
+        return;
+    }
 
     if (fabsf(error) <= ABAD_CENTER_FINAL_TOL_RAD && both_active) {
         abad_center_settle_count++;
