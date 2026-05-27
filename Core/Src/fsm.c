@@ -18,6 +18,7 @@
 #include "position_sensor.h"
 #include "drv8323.h"
 #include "abad_calibration.h"
+#include "version_info.h"
 
  void run_fsm(FSMStruct * fsmstate){
 	 /* run_fsm is run every commutation interrupt cycle */
@@ -301,6 +302,13 @@
 					fsmstate->ready = 0;
 					break;
 				case SETUP_CMD:
+					printf("\r\n= = = = = Version Information = = = = =\r\n");
+					printf("\r\nFirmware Version:  %s\r\n", FIRMWARE_VERSION);
+					printf("\r\nBuild Date:  %s\r\n", FIRMWARE_DATE);
+					printf("Build Time:  %s\r\n", FIRMWARE_TIME);
+					printf("\r\nAuthor:  %s\r\n", AUTHOR_NAME);
+					printf("\r\nModification Info:  %s\r\n", MODIFICATION_INFO);
+					printf("\r\n= = = = = Program Started = = = = =\r\n");
 					fsmstate->next_state = SETUP_MODE;
 					fsmstate->ready = 0;
 					break;
@@ -371,7 +379,7 @@
 	    printf("\r\n Motor:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "g", "Gear Ratio",                                "0",   "-",      GR);
 	    printf(" %-4s %-31s %-5s %-6s %.5f\n\r", "t", "Torque Constant (N-m/A)",                   "0",   "-",      KT);
-		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "P", "Motor Position (0=Hip, 1=ABAD Normal, 2=ABAD Mirrored)",  "0",   "2",      MOTOR_POSITION);
+		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "P", "Motor Position (0=Hip, 1=ABAD Normal (FL/RR), 2=ABAD Mirrored (FR/RL))",  "0",   "2",      MOTOR_POSITION);
 	    printf("\r\n Control:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "b", "Current Bandwidth (Hz)",                    "100", "2000",   I_BW);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "l", "Current Limit (A)",                         "0.0", "75.0",   I_MAX);
