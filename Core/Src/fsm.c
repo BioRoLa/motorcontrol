@@ -164,11 +164,11 @@
 					controller.kd = ABAD_CAL_KD;
 					enter_motor_mode();
 					abad_cal_reset();
-					abad_cal.abad_cal_state = CODE_ABAD_CALIBRATING;
+					hall_cal.hall_cal_state = CODE_HALL_CALIBRATING;
 					abad_cal.abad_present_pos = controller.theta_mech;
 					printf("ABAD Hall Cal: starting\r\n");
 					can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
-					                    controller.i_q_filt*KT*GR, CODE_ABAD_CALIBRATING, HALL_CALIBRATE);
+					                    controller.i_q_filt*KT*GR, CODE_HALL_CALIBRATING, HALL_CALIBRATE);
 				}
 				break;
 			case HALL_DEBUG_MODE:

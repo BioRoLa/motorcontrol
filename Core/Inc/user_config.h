@@ -383,10 +383,6 @@ extern "C" {
 #define CODE_HALL_CAL_SUCCESS	2
 #define CODE_HALL_CAL_FAIL		3
 
-#define CODE_ABAD_UNCALIBRATED	0
-#define CODE_ABAD_CALIBRATING	1
-#define CODE_ABAD_CAL_SUCCESS	2
-#define CODE_ABAD_CAL_FAIL		3
 
 
 struct FloatRegConfig{

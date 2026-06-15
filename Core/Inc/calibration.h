@@ -61,7 +61,6 @@ typedef struct{
 	float abad_cal_speed; // rad/s
 	float abad_present_pos; // calibration start position
 	uint8_t bottom_transition_count; // count bottom-sensor transitions while seeking zero
-	int abad_cal_state;
 } HallCalStructABAD;
 
 void order_phases(EncoderStruct *encoder, ControllerStruct *controller, CalStruct *cal, int loop_count);

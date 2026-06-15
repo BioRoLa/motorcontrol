@@ -247,7 +247,7 @@ int main(void)
   abad_cal.abad_cal_speed = 0.25; // rad/s
   abad_cal.abad_present_pos = 0;
   abad_cal.bottom_transition_count = 0;
-  abad_cal.abad_cal_state = CODE_ABAD_UNCALIBRATED;
+  hall_cal.hall_cal_state = CODE_HALL_UNCALIBRATED;
 
   /* commutation encoder setup */
   comm_encoder.m_zero = M_ZERO;
