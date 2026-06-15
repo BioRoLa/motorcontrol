@@ -86,34 +86,19 @@
 			 if((CAN_TIMEOUT > 0 ) && (controller.timeout > CAN_TIMEOUT)){
 				 zero_commands(&controller);
 			 }
-			 /* Otherwise, commutate */
-
-			 /* Calibrate Hall Sensor */
-			 hall_calibrate(fsmstate);
-
+			 if (MOTOR_POSITION == MOTOR_POS_HIP) {
+				 hall_calibrate(fsmstate);
+			 } else {
+				 abad_hall_calibrate(fsmstate);
+			 }
 			 torque_control(&controller);
 			 commutate(&controller, &comm_encoder);
-
 			 controller.timeout ++;
 			 break;
 		 case HALL_DEBUG_MODE:
 			 hall_debug_mode(fsmstate);
 			 break;
-	 case ABAD_CALIBRATE:
-		 /* If CAN has timed out, reset all commands */
-		 if((CAN_TIMEOUT > 0 ) && (controller.timeout > CAN_TIMEOUT)){
-			 zero_commands(&controller);
-		 }
-		 /* Otherwise, commutate */
-
-		 /* Calibrate AB/AD Hall Sensor */
-		 abad_hall_calibrate(fsmstate);
-
-		 torque_control(&controller);
-		 commutate(&controller, &comm_encoder);
-
-		 controller.timeout ++;
-		 break;	 }
+	 }
 
  }
 
@@ -162,13 +147,29 @@
 				GPIO_ENABLE;
 				break;
 			case HALL_CALIBRATE:
-				if (fsmstate->print_uart_msg){
-					printf("\r\nEntering Hall Calibration Mode\r\n");
+				if (MOTOR_POSITION == MOTOR_POS_HIP) {
+					if (fsmstate->print_uart_msg){
+						printf("\r\nEntering Hall Calibration Mode\r\n");
+					}
+					controller.kp = HALL_CAL_KP;
+					controller.ki = HALL_CAL_KI;
+					controller.kd = HALL_CAL_KD;
+					enter_motor_mode();
+				} else {
+					if (fsmstate->print_uart_msg){
+						printf("\r\nEntering AB/AD Hall Calibration Mode\r\n");
+					}
+					controller.kp = ABAD_CAL_KP;
+					controller.ki = ABAD_CAL_KI;
+					controller.kd = ABAD_CAL_KD;
+					enter_motor_mode();
+					abad_cal_reset();
+					abad_cal.abad_cal_state = CODE_ABAD_CALIBRATING;
+					abad_cal.abad_present_pos = controller.theta_mech;
+					printf("ABAD Hall Cal: starting\r\n");
+					can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
+					                    controller.i_q_filt*KT*GR, CODE_ABAD_CALIBRATING, HALL_CALIBRATE);
 				}
-				controller.kp = HALL_CAL_KP;
-				controller.ki = HALL_CAL_KI;
-				controller.kd = HALL_CAL_KD;
-				enter_motor_mode();
 				break;
 			case HALL_DEBUG_MODE:
 				if (fsmstate->print_uart_msg){
@@ -181,21 +182,6 @@
 				drv_disable_gd(drv);
 				GPIO_DISABLE;
 				LED_LOW;
-				break;
-			case ABAD_CALIBRATE:
-				if (fsmstate->print_uart_msg){
-					printf("\r\nEntering AB/AD Hall Calibration Mode\r\n");
-				}
-				controller.kp = ABAD_CAL_KP;
-				controller.ki = ABAD_CAL_KI;
-				controller.kd = ABAD_CAL_KD;
-				enter_motor_mode();
-				abad_cal_reset();
-				abad_cal.abad_cal_state = CODE_ABAD_CALIBRATING;
-				abad_cal.abad_present_pos = controller.theta_mech;
-				printf("ABAD Hall Cal: starting\r\n");
-				can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
-				                    controller.i_q_filt*KT*GR, CODE_ABAD_CALIBRATING, fsmstate->state);
 				break;
 
 		}
@@ -264,15 +250,6 @@
 				}
 				fsmstate->ready = 1;
 				break;
-			case ABAD_CALIBRATE:
-				if (fsmstate->print_uart_msg){
-					printf("\r\nExiting AB/AD Hall Calibration Mode\r\n");
-				}
-				GPIO_DISABLE;
-				LED_LOW;
-				drv_disable_gd(drv);
-				fsmstate->ready = 1;
-				break;
 		}
 
  }
@@ -324,11 +301,7 @@
 					hall_cal.hall_cal_state = CODE_HALL_CALIBRATING;
 					hall_cal.hall_present_pos = 0.0f;
 					hall_cal.hall_cal_pcmd = 0.0f;
-					if (MOTOR_POSITION == MOTOR_POS_HIP) {
-						fsmstate->next_state = HALL_CALIBRATE;
-					} else {
-						fsmstate->next_state = ABAD_CALIBRATE;
-					}
+					fsmstate->next_state = HALL_CALIBRATE;
 					fsmstate->ready = 0;
 					break;
 				case HALL_DEBUG_CMD:

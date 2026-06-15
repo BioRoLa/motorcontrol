@@ -45,7 +45,7 @@
 
 /*
  * abad_hall_calibrate()
- * Main calibration routine - run every interrupt cycle during ABAD_CALIBRATE state
+ * Main calibration routine - run every interrupt cycle during HALL_CALIBRATE state (ABAD path)
  * Detects magnet transitions from both sensors, builds position map, establishes zero
  */
 void abad_hall_calibrate(FSMStruct * fsmstate);

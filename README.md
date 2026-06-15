@@ -74,7 +74,6 @@ The control flow is interrupt-driven and state-machine controlled.
   - `ENCODER_CALIBRATE`
   - `HALL_CALIBRATE`
   - `HALL_DEBUG_MODE`
-  - `ABAD_CALIBRATE`
 
 ## Calibration control logic
 
@@ -112,16 +111,14 @@ Control sequence:
 
 Key idea: the hip routine finds the center of one hall detection window and uses that as the zero reference (plus optional offset).
 
-## AB/AD dual-hall calibration (`ABAD_CALIBRATE`)
+## AB/AD dual-hall calibration (`HALL_CALIBRATE`, ABAD path)
 
 Implemented in `abad_calibration.c` (`abad_hall_calibrate`) using two binary hall sensors (`HALL_A_IO`, `HALL_B_IO`).
 
 Control sequence:
 
 1. Enter Hall Calibration (`h`) from menu.
-2. FSM routes automatically:
-   - `MOTOR_POSITION == MOTOR_POS_HIP` -> `HALL_CALIBRATE`
-   - otherwise -> `ABAD_CALIBRATE`
+2. FSM routes to `HALL_CALIBRATE` for both paths; `MOTOR_POSITION` selects HIP or ABAD internally.
 3. AB/AD calibration validates motor role (must not be HIP).
 4. `FIND_BOTTOM_SENSOR`:
    - move in configured AB/AD direction
@@ -344,7 +341,7 @@ This allows orientation-dependent direction handling without forking firmware pe
 
 Startup probe and reset behavior:
 
-- On entering `ABAD_CALIBRATE`, the firmware calls `abad_cal_reset()` to clear any previous transition history and initialize the internal command/estimate state so calibration starts cleanly.
+- On entering `HALL_CALIBRATE` (ABAD path), the firmware calls `abad_cal_reset()` to clear any previous transition history and initialize the internal command/estimate state so calibration starts cleanly.
 - **Active direction probe**: before collecting hall transitions, the firmware probes the configured calibration direction (`ABAD_CAL_DIR` with motor-role inversion) using a short fixed-angle step (`ABAD_PROBE_STEP_DEG`) over `ABAD_PROBE_CYCLES` cycles. If hall transitions are detected, that direction is locked for the rest of calibration. If not, it performs exactly one opposite-direction attempt. If neither attempt produces transitions, calibration aborts with an explicit probe failure message.
 - This active probe **requires no assumptions about encoder accuracy** at startup and automatically selects the productive direction regardless of mechanical position or encoder reference quality.
 

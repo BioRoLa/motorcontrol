@@ -136,7 +136,7 @@ void abad_hall_calibrate(FSMStruct * fsmstate) {
                (unsigned)abad_cal.bottom_transition_count);
         if (phase_changed) {
             can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
-                                controller.i_q_filt*KT*GR, CODE_ABAD_CALIBRATING, fsmstate->state);
+                                controller.i_q_filt*KT*GR, CODE_ABAD_CALIBRATING, HALL_CALIBRATE);
         }
     }
 

@@ -24,7 +24,6 @@ extern "C" {
 #define SETUP_MODE          4
 #define ENCODER_CALIBRATE   5
 #define ENCODER_MODE        6
-#define ABAD_CALIBRATE      7
 #define HALL_DEBUG_MODE     8
 
 #define MENU_CMD			27
@@ -61,7 +60,6 @@ void enter_motor_mode(void);
 void process_user_input(FSMStruct * fsmstate);
 void encoder_set_zero(void);
 void hall_calibrate(FSMStruct * fsmstate);
-void abad_hall_calibrate(FSMStruct * fsmstate);
 void hall_debug_mode(FSMStruct * fsmstate);
 void abad_encoder_set_zero(void);
 
