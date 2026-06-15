@@ -557,6 +557,14 @@
 	M_ZERO = zero_count;
 	ps_sample(&comm_encoder, DT);
 	controller.theta_mech = 0;
+	// Changing M_ZERO makes all buffered angle_multiturn entries inconsistent with the
+	// new zero frame. Flush the buffer so the velocity estimate starts at zero rather
+	// than producing a large spurious reading (and kd torque spike) for N_POS_SAMPLES cycles.
+	float cur_angle = comm_encoder.angle_multiturn[0];
+	for (int i = 1; i < N_POS_SAMPLES; i++) {
+		comm_encoder.angle_multiturn[i] = cur_angle;
+	}
+	comm_encoder.velocity = 0.0f;
  }
 
 

@@ -160,16 +160,6 @@ void abad_cal_reset(void){
     ps_sample(&comm_encoder, DT);
     controller.theta_mech = comm_encoder.angle_multiturn[0] / GR;
 
-    // Flush the velocity history buffer. encoder_set_zero() (called just before this)
-    // changes M_ZERO, making old buffer entries inconsistent with the new zero frame.
-    // Without this, the velocity estimate is spuriously large for the first N_POS_SAMPLES
-    // cycles, which creates a large kd damping torque spike on the first commutation cycle.
-    float cur_angle = comm_encoder.angle_multiturn[0];
-    for (int i = 1; i < N_POS_SAMPLES; i++) {
-        comm_encoder.angle_multiturn[i] = cur_angle;
-    }
-    comm_encoder.velocity = 0.0f;
-
     abad_cal.hall_a_input = HAL_GPIO_ReadPin(HALL_A_IO);
     abad_cal.hall_b_input = HAL_GPIO_ReadPin(HALL_B_IO);
     abad_cal.hall_a_preinput = abad_cal.hall_a_input;
