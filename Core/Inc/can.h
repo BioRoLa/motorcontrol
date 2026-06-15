@@ -89,6 +89,7 @@ void can_tx_init(CANTxMessage *msg);
 void pack_reply_default(CANRxMessage rx_msg, CANTxMessage *tx_msg, float p, float v, float t, int version, int calibrate_finish, int state);
 void pack_reply_config(CANRxMessage rx_msg, CANTxMessage *tx_msg, int version, int state);
 void pack_reply_hall_cal(CANRxMessage rx_msg, CANTxMessage *tx_msg, int version, int state);
+void can_send_cal_status(float p, float v, float t, int cal_state, int fsm_state);
 void unpack_control_cmd(CANRxMessage rx_msg, float *commands);
 int unpack_config_cmd(CANRxMessage rx_msg);
 int unpack_hall_cal_cmd(CANRxMessage rx_msg);

@@ -236,6 +236,13 @@ void pack_reply_hall_cal(CANRxMessage rx_msg, CANTxMessage *tx_msg, int version,
 	tx_msg->data[7] = (version<<4) + (state&0xF);
 }
 
+void can_send_cal_status(float p, float v, float t, int cal_state, int fsm_state) {
+    uint32_t TxMailbox;
+    pack_reply_default(can_rx, &can_tx, p, v, t, (int)VERSION_NUM, cal_state, fsm_state);
+    can_tx.tx_header.StdId = can_rx.rx_header.StdId | 0x400;
+    HAL_CAN_AddTxMessage(&CAN_H, &can_tx.tx_header, can_tx.data, &TxMailbox);
+}
+
 /// CAN Command Packet Structure ///
 /// 16 bit position command, between -4*pi and 4*pi
 /// 12 bit velocity command, between -30 and + 30 rad/s

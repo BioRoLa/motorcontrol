@@ -116,8 +116,9 @@ void abad_hall_calibrate(FSMStruct * fsmstate) {
     float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
 
     uint8_t log_phase_status = 0;
+    uint8_t phase_changed = (abad_last_logged_phase != abad_cal_phase);
     abad_phase_log_div++;
-    if ((abad_last_logged_phase != abad_cal_phase) || (abad_phase_log_div >= 4000)) {
+    if (phase_changed || (abad_phase_log_div >= 8000)) {
         log_phase_status = 1;
         abad_phase_log_div = 0;
         abad_last_logged_phase = abad_cal_phase;
@@ -133,6 +134,10 @@ void abad_hall_calibrate(FSMStruct * fsmstate) {
                (int)(abad_cal.hall_a_input == 0),
                (int)(abad_cal.hall_b_input == 0),
                (unsigned)abad_cal.bottom_transition_count);
+        if (phase_changed) {
+            can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
+                                controller.i_q_filt*KT*GR, CODE_ABAD_CALIBRATING, fsmstate->state);
+        }
     }
 
     if (abad_cal_phase == ABAD_CAL_PHASE_FIND_BOTTOM_SENSOR) {
@@ -322,10 +327,12 @@ static void abad_cal_center_zero(FSMStruct * fsmstate) {
         abad_cal.abad_cal_state = CODE_ABAD_CAL_SUCCESS;
         abad_encoder_set_zero();
         fsmstate->next_state = MOTOR_MODE;
-         printf("AB/AD Calibration SUCCESS - centered at %.2f deg (target %.2f deg, err %.2f deg)\r\n",
-             (double)(joint_theta * 180.0f / PI_F),
-             (double)(abad_zero_target * 180.0f / PI_F),
-             (double)(error * 180.0f / PI_F));
+        printf("AB/AD Calibration SUCCESS - centered at %.2f deg (target %.2f deg, err %.2f deg)\r\n",
+            (double)(joint_theta * 180.0f / PI_F),
+            (double)(abad_zero_target * 180.0f / PI_F),
+            (double)(error * 180.0f / PI_F));
+        can_send_cal_status(0.0f, comm_encoder.velocity/GR, 0.0f,
+                            CODE_ABAD_CAL_SUCCESS, MOTOR_MODE);
         return;
     }
 }
@@ -335,6 +342,8 @@ static void abad_cal_fail(FSMStruct * fsmstate, const char *message) {
     controller.p_des = abad_joint_to_controller_angle(abad_controller_to_joint_angle(controller.theta_mech));
     fsmstate->next_state = MENU_MODE;
     printf("%s\r\n", message);
+    can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
+                        controller.i_q_filt*KT*GR, CODE_ABAD_CAL_FAIL, MENU_MODE);
 }
 
 static int abad_calibration_direction(void) {
