@@ -195,18 +195,6 @@ void abad_cal_reset(void){
     abad_center_trigger_reverse = 0.0f;
     abad_center_reverse_armed = 0;
     abad_center_zero_cycles = 0;
-
-    // If the bottom sensor is already active, the motor is in or past the bottom sensor
-    // zone. Continuing in the normal sweep direction would drive it into the hard stop.
-    // Instead, reverse the sweep direction so FIND_ZERO approaches the both-active
-    // (zero) zone from the correct side.
-    uint8_t bottom_at_start = (abad_bottom_sensor == 0) ? abad_sensor_a_active() : abad_sensor_b_active();
-    if (bottom_at_start) {
-        abad_motion_dir = -abad_motion_dir;
-        abad_cal_phase = ABAD_CAL_PHASE_FIND_ZERO;
-        abad_prev_both_active = 0;
-        printf("ABAD Cal: bottom sensor active at start, reversing sweep to approach zero from center side\r\n");
-    }
 }
 
 static void abad_cal_find_bottom_sensor(FSMStruct * fsmstate) {
