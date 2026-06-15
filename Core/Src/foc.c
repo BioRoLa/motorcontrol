@@ -164,6 +164,8 @@ void reset_foc(ControllerStruct *controller){
     controller->v_d = 0;
     controller->fw_int = 0;
     controller->otw_flag = 0;
+    controller->dtheta_mech = 0.0f;
+    in_err = 0.0f;
 
     }
 

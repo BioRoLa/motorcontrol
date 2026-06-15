@@ -185,6 +185,17 @@ void abad_cal_reset(void){
     abad_center_trigger_reverse = 0.0f;
     abad_center_reverse_armed = 0;
     abad_center_zero_cycles = 0;
+    // If the bottom sensor is already active at startup we're already in its magnet
+    // zone — the layout means this zone leads directly into the both-active zone with
+    // no gap. Skip FIND_BOTTOM_SENSOR and go straight to FIND_ZERO so we sweep
+    // forward until both sensors are active (the actual zero).
+    uint8_t bottom_at_start = (abad_bottom_sensor == 0)
+        ? (abad_cal.hall_a_input == 0)
+        : (abad_cal.hall_b_input == 0);
+    if (bottom_at_start) {
+        abad_cal_phase = ABAD_CAL_PHASE_FIND_ZERO;
+        printf("AB/AD Cal: bottom sensor active at start, proceeding directly to zero search\r\n");
+    }
 }
 
 static void abad_cal_find_bottom_sensor(FSMStruct * fsmstate) {
