@@ -319,6 +319,11 @@
 					encoder_set_zero();
 					break;
 				case HALL_CAL_CMD:
+					encoder_set_zero();
+					hall_cal.hall_cal_count = 0;
+					hall_cal.hall_cal_state = CODE_HALL_CALIBRATING;
+					hall_cal.hall_present_pos = 0.0f;
+					hall_cal.hall_cal_pcmd = 0.0f;
 					if (MOTOR_POSITION == MOTOR_POS_HIP) {
 						fsmstate->next_state = HALL_CALIBRATE;
 					} else {

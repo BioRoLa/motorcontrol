@@ -308,11 +308,6 @@ void can_tx_rx(void){
 					break;
 
 				case FC_HALL_CAL:
-					encoder_set_zero();
-					hall_cal.hall_cal_count = 0;
-					hall_cal.hall_cal_state = CODE_HALL_CALIBRATING; // calibrating
-					hall_cal.hall_present_pos = 0.0f;
-					hall_cal.hall_cal_pcmd = 0.0f;
 					update_fsm(&state, HALL_CAL_CMD);
 					pack_reply_hall_cal(can_rx, &can_tx, VERSION_NUM, state.state);
 					break;
