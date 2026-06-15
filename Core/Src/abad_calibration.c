@@ -8,6 +8,7 @@
  */
 
 #include "abad_calibration.h"
+#include "fsm.h"
 #include "hw_config.h"
 #include "structs.h"
 #include "user_config.h"
@@ -336,7 +337,8 @@ static void abad_cal_center_zero(FSMStruct * fsmstate) {
         abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_theta);
         controller.p_des = abad_cal.abad_cal_pcmd;
         hall_cal.hall_cal_state = CODE_HALL_CAL_SUCCESS;
-        abad_encoder_set_zero();
+        encoder_set_zero();
+        printf("AB/AD zero position set\r\n");
         fsmstate->next_state = MOTOR_MODE;
         printf("AB/AD Calibration SUCCESS - centered at %.2f deg (target %.2f deg, err %.2f deg)\r\n",
             (double)(joint_theta * 180.0f / PI_F),
@@ -380,11 +382,3 @@ static const char *abad_phase_name(uint8_t phase) {
     }
 }
 
-void abad_encoder_set_zero(void) {
-	comm_encoder.m_zero = 0;
-	comm_encoder.first_sample = 0;
-	M_ZERO = comm_encoder.count;
-	ps_sample(&comm_encoder, DT);
-    controller.theta_mech = 0.0f;
-    printf("AB/AD zero position set\r\n");
-}

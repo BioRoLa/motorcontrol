@@ -50,13 +50,6 @@
  */
 void abad_hall_calibrate(FSMStruct * fsmstate);
 
-/*
- * abad_encoder_set_zero()
- * Establishes the mechanical zero reference for AB/AD axis
- * Called when calibration completes successfully
- */
-void abad_encoder_set_zero(void);
-
 void abad_cal_reset(void);
 
 /*

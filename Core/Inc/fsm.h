@@ -61,7 +61,6 @@ void process_user_input(FSMStruct * fsmstate);
 void encoder_set_zero(void);
 void hall_calibrate(FSMStruct * fsmstate);
 void hall_debug_mode(FSMStruct * fsmstate);
-void abad_encoder_set_zero(void);
 
 #ifdef __cplusplus
 }
