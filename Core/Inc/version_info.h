@@ -8,7 +8,7 @@
 #ifndef VERSION_INFO_H_
 #define VERSION_INFO_H_
 
-#define FIRMWARE_VERSION   "5.3.0"
+#define FIRMWARE_VERSION   "5.3.1"
 #define FIRMWARE_DATE      __DATE__
 #define FIRMWARE_TIME      __TIME__
 #define AUTHOR_NAME        "Chen, Alex (R14522850)"
