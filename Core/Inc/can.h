@@ -58,6 +58,7 @@ extern CAN_HandleTypeDef hcan1;
 #define FC_HALL_CAL			3
 #define FC_ENTER_MOTOR		4
 #define FC_CONTROL_CMD		5
+#define FC_GET_STATE		6   /* read-only state poll: reply only, never touches the FSM */
 /* USER CODE END Private defines */
 
 void MX_CAN1_Init(void);

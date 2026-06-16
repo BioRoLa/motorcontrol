@@ -324,7 +324,11 @@ void can_tx_rx(void){
 					controller.timeout = 0;					    // Reset timeout counter
 					controller.i_mag_max = controller.i_q;
 					break;
-
+				case FC_GET_STATE:
+					// Read-only: report state + hall_cal_state without calling update_fsm
+					// or unpack_*, so it can never mutate the FSM from any mode.
+					pack_reply_default(can_rx, &can_tx, comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR, controller.i_q_filt*KT*GR, VERSION_NUM, hall_cal.hall_cal_state, state.state);
+					break;
 				default:
 					pack_reply_default(can_rx, &can_tx, comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR, controller.i_q_filt*KT*GR, VERSION_NUM, hall_cal.hall_cal_state, state.state);	// Pack response
 					break;
