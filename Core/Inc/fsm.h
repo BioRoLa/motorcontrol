@@ -59,7 +59,6 @@ void enter_setup_state(void);
 void enter_motor_mode(void);
 void process_user_input(FSMStruct * fsmstate);
 void encoder_set_zero(void);
-void hall_calibrate(FSMStruct * fsmstate);
 void hall_debug_mode(FSMStruct * fsmstate);
 
 #ifdef __cplusplus

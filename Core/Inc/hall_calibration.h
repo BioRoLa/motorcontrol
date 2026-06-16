@@ -1,16 +1,18 @@
 /*
- * abad_calibration.h
+ * hall_calibration.h
  *
  *  Created on: May 8, 2026
  *      Author: Alex
  *
- *  AB/AD (Abduction/Adduction) Hall Effect Calibration
- *  Dual binary hall sensors (A, B) reading 4 magnets (M1-M4) on rotor
- *  Position range: -90° (A@M4) to +90° (B@M1)
+ *  Hall effect calibration routines for both joint types:
+ *   - HIP:   single binary hall sensor (hall_calibrate)
+ *   - AB/AD: dual binary hall sensors (A, B) reading 4 magnets (M1-M4)
+ *            on rotor, position range -90 deg (A@M4) to +90 deg (B@M1)
+ *            (abad_hall_calibrate)
  */
 
-#ifndef INC_ABAD_CALIBRATION_H_
-#define INC_ABAD_CALIBRATION_H_
+#ifndef INC_HALL_CALIBRATION_H_
+#define INC_HALL_CALIBRATION_H_
 
 #include "math_ops.h"
 #include "fsm.h"
@@ -44,6 +46,13 @@
 #define ABAD_MAX_BOTTOM_TRANSITIONS 3
 
 /*
+ * hall_calibrate()
+ * HIP calibration routine - run every interrupt cycle during HALL_CALIBRATE state (HIP path)
+ * Sweeps a single binary hall sensor to find its center, then zeros the encoder there
+ */
+void hall_calibrate(FSMStruct * fsmstate);
+
+/*
  * abad_hall_calibrate()
  * Main calibration routine - run every interrupt cycle during HALL_CALIBRATE state (ABAD path)
  * Detects magnet transitions from both sensors, builds position map, establishes zero
@@ -74,4 +83,4 @@ uint8_t abad_sensor_a_active(void);
  */
 uint8_t abad_sensor_b_active(void);
 
-#endif /* INC_ABAD_CALIBRATION_H_ */
+#endif /* INC_HALL_CALIBRATION_H_ */
