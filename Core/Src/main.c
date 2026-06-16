@@ -49,7 +49,7 @@
 #include "foc.h"
 #include "math_ops.h"
 #include "calibration.h"
-#include "abad_calibration.h"
+#include "hall_calibration.h"
 #include "version_info.h"
 /* USER CODE END Includes */
 

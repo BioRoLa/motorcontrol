@@ -42,7 +42,7 @@ Hardware pin/peripheral mappings and low-level constants are centralized in:
 - `Core/Src/can.c`: CAN packet parsing/packing and register access protocol
 - `Core/Src/position_sensor.c`: SPI encoder sampling and processing
 - `Core/Src/calibration.c`: encoder phase ordering and calibration
-- `Core/Src/abad_calibration.c`: AB/AD dual-hall calibration logic
+- `Core/Src/hall_calibration.c`: hall calibration logic for both HIP (single sensor) and AB/AD (dual sensor) joints
 - `Core/Inc/user_config.h` + `Core/Src/user_config.c`: persistent register map and validation
 
 ## Build and flash
@@ -91,7 +91,7 @@ HALL_CALIBRATE:
 
 ## Hip hall calibration (`HALL_CALIBRATE`)
 
-Implemented in `fsm.c` (`hall_calibrate`) using a single binary hall input.
+Implemented in `hall_calibration.c` (`hall_calibrate`) using a single binary hall input.
 
 Control sequence:
 
@@ -113,7 +113,7 @@ Key idea: the hip routine finds the center of one hall detection window and uses
 
 ## AB/AD dual-hall calibration (`HALL_CALIBRATE`, ABAD path)
 
-Implemented in `abad_calibration.c` (`abad_hall_calibrate`) using two binary hall sensors (`HALL_A_IO`, `HALL_B_IO`).
+Implemented in `hall_calibration.c` (`abad_hall_calibrate`) using two binary hall sensors (`HALL_A_IO`, `HALL_B_IO`).
 
 Control sequence:
 
@@ -335,7 +335,7 @@ This allows orientation-dependent direction handling without forking firmware pe
 
 ### AB/AD limits and command handling
 
-- Mechanical limits are defined in `Core/Inc/abad_calibration.h`.
+- Mechanical limits are defined in `Core/Inc/hall_calibration.h`.
 - Calibration operates inside a safer travel window and fails if exceeded.
 - Runtime AB/AD command handling rejects out-of-range commands with printed error output (rather than silently applying them).
 
@@ -401,6 +401,7 @@ For porting to another board, start here:
 
 ### 2026-06-16
 
+- **HIP and AB/AD hall calibration consolidated into one file.** `abad_calibration.{c,h}` was renamed to `hall_calibration.{c,h}`, and the HIP `hall_calibrate()` routine was moved out of `fsm.c` into it, so both hall-calibration routines now live side by side. `fsm.c` keeps only the FSM dispatch between them.
 - **AB/AD calibration is no longer a separate FSM state.** It now runs as an internal flag inside the existing `HALL_CALIBRATE` state, with HIP vs AB/AD selected from `MOTOR_POSITION`. This keeps a single calibration entry point (`h` / `FC_HALL_CAL`) for both sensing layouts and simplifies the sbRIO communication contract (`eb249ca`, `de077c9`).
 - **State reporting unified.** `abad_cal_state` was merged into `hall_cal_state`, and `abad_encoder_set_zero` was merged into `encoder_set_zero`, so callers read a single calibration status / zeroing path regardless of motor role (`de077c9`, `70791fc`).
 - **New read-only CAN function code `FC_GET_STATE` (6).** Polls FSM `state` and `hall_cal_state` via `pack_reply_default` without calling `update_fsm` or any `unpack_*`, so a status poll can never mutate the FSM from any mode (`68ebea8`).

@@ -17,7 +17,7 @@
 #include "math_ops.h"
 #include "position_sensor.h"
 #include "drv8323.h"
-#include "abad_calibration.h"
+#include "hall_calibration.h"
 #include "version_info.h"
 
  void run_fsm(FSMStruct * fsmstate){
@@ -539,132 +539,6 @@
 	}
 	comm_encoder.velocity = 0.0f;
  }
-
-
- void hall_calibrate(FSMStruct * fsmstate){
-     static uint32_t hip_log_div = 0;
-     static uint8_t  hip_centering_logged = 0;
-     static int      hip_prev_cal_state = -1;
-
-     int state_before = hall_cal.hall_cal_state;
-
-     /* Detect start of a new calibration run */
-     if (hip_prev_cal_state != CODE_HALL_CALIBRATING && state_before == CODE_HALL_CALIBRATING) {
-         hip_log_div = 0;
-         hip_centering_logged = 0;
-         printf("HIP Hall Cal: starting  dir=%s  speed=%.1f rad/s\r\n",
-                HALL_CAL_DIR > 0 ? "CW" : "CCW", (double)HALL_CAL_SPEED);
-         can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
-                             controller.i_q_filt*KT*GR, CODE_HALL_CALIBRATING, fsmstate->state);
-     }
-
-     if(state_before == CODE_HALL_UNCALIBRATED || state_before >= CODE_HALL_CAL_SUCCESS);
-     else{
-    	 hall_cal.hall_input = HAL_GPIO_ReadPin(HALL_IO);
-    	 if((HALL_CAL_DIR == 1 && controller.theta_mech >= hall_cal.hall_present_pos + 2*PI_F) || (HALL_CAL_DIR == -1 && controller.theta_mech <= hall_cal.hall_present_pos - 2*PI_F)){
-    		 hall_cal.hall_cal_state = CODE_HALL_CAL_FAIL;
-    		 fsmstate->next_state = MENU_MODE;
-    	 }
-         else{
-        	 if(hall_cal.hall_input != hall_cal.hall_preinput) {
-        		 hall_cal.hall_cal_count += 1;
-        		 if(hall_cal.hall_input == 0) {
-        		     hall_cal.hall_in_pos = controller.theta_mech;
-        		     printf("HIP Hall Cal: sensor enter  pos=%.1f deg\r\n",
-        		            (double)(controller.theta_mech * 180.0f / PI_F));
-        		 } else {
-        			 hall_cal.hall_out_pos = controller.theta_mech;
-        			 hall_cal.hall_mid_pos = (hall_cal.hall_in_pos + hall_cal.hall_out_pos) / 2.0f;
-        			 printf("HIP Hall Cal: sensor exit  pos=%.1f deg  center=%.1f deg\r\n",
-        			        (double)(controller.theta_mech * 180.0f / PI_F),
-        			        (double)(hall_cal.hall_mid_pos * 180.0f / PI_F));
-        			 can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
-        			                     controller.i_q_filt*KT*GR, CODE_HALL_CALIBRATING, fsmstate->state);
-                 }
-             }
-             if(hall_cal.hall_cal_count <= 1) {
-                 hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd + HALL_CAL_DIR*(1.0f/(40000.0f)*HALL_CAL_SPEED);
-                 if(++hip_log_div >= 20000) {
-                     hip_log_div = 0;
-                     printf("HIP Hall Cal: sweeping  pos=%.1f deg\r\n",
-                            (double)(controller.theta_mech * 180.0f / PI_F));
-                 }
-             } else {
-                 if(!hip_centering_logged) {
-                     hip_centering_logged = 1;
-                     printf("HIP Hall Cal: centering to %.1f deg\r\n",
-                            (double)(hall_cal.hall_mid_pos * 180.0f / PI_F));
-                     can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
-                                         controller.i_q_filt*KT*GR, CODE_HALL_CALIBRATING, fsmstate->state);
-                 }
-                 if(HALL_CAL_DIR == 1){
-                     if(HALL_CAL_OFFSET == 0){
-                    	 if(controller.theta_mech >= hall_cal.hall_mid_pos) hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd - HALL_CAL_DIR*1.0f/40000.0f*HALL_CAL_SPEED;
-                    	 else{
-                    		 hall_cal.hall_cal_pcmd = 0.0f;
-                    		 hall_cal.hall_cal_state = CODE_HALL_CAL_SUCCESS;
-                    		 hall_cal.hall_cal_count = 0;
-                    		 encoder_set_zero();
-                    		 fsmstate->next_state = MOTOR_MODE;
-                         }
-                     } else {
-                         if(controller.theta_mech <= hall_cal.hall_mid_pos + HALL_CAL_OFFSET*PI_F/180) hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd + HALL_CAL_DIR*1.0f/40000.0f*HALL_CAL_SPEED;
-                         else{
-                        	 hall_cal.hall_cal_pcmd = 0.0f;
-                        	 hall_cal.hall_cal_state = CODE_HALL_CAL_SUCCESS;
-                             hall_cal.hall_cal_count = 0;
-                    		 encoder_set_zero();
-                    		 fsmstate->next_state = MOTOR_MODE;
-                         }
-                     }
-                 } else if(HALL_CAL_DIR == -1){
-                     if(HALL_CAL_OFFSET == 0){
-                         if(controller.theta_mech <= hall_cal.hall_mid_pos) hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd - HALL_CAL_DIR*1.0f/40000.0f*HALL_CAL_SPEED;
-                         else{
-                        	 hall_cal.hall_cal_pcmd = 0.0f;
-                        	 hall_cal.hall_cal_state = CODE_HALL_CAL_SUCCESS;
-                             hall_cal.hall_cal_count = 0;
-                    		 encoder_set_zero();
-                    		 fsmstate->next_state = MOTOR_MODE;
-                         }
-                     } else {
-                         if(controller.theta_mech >= hall_cal.hall_mid_pos - HALL_CAL_OFFSET*PI_F/180) hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd + HALL_CAL_DIR*1.0f/40000.0f*HALL_CAL_SPEED;
-                         else{
-                        	 hall_cal.hall_cal_pcmd = 0.0f;
-                        	 hall_cal.hall_cal_state = CODE_HALL_CAL_SUCCESS;
-                             hall_cal.hall_cal_count = 0;
-                    		 encoder_set_zero();
-                    		 fsmstate->next_state = MOTOR_MODE;
-                         }
-                     }
-                 }
-             }
-			 if(hall_cal.hall_cal_pcmd > 2*PI_F){
-				 hall_cal.hall_cal_pcmd -= 2*PI_F;
-			 }
-			 if(hall_cal.hall_cal_pcmd < 0){
-				 hall_cal.hall_cal_pcmd += 2*PI_F;
-			 }
-             controller.p_des = hall_cal.hall_cal_pcmd;
-         }
-         hall_cal.hall_preinput = hall_cal.hall_input;
-     }
-
-     /* Report terminal state transitions */
-     int state_after = hall_cal.hall_cal_state;
-     if (state_before == CODE_HALL_CALIBRATING && state_after != CODE_HALL_CALIBRATING) {
-         if (state_after == CODE_HALL_CAL_SUCCESS) {
-             printf("HIP Hall Cal: SUCCESS  center=%.1f deg (now zero)\r\n",
-                    (double)(hall_cal.hall_mid_pos * 180.0f / PI_F));
-         } else {
-             printf("HIP Hall Cal: FAIL  swept >360 deg without finding sensor\r\n");
-         }
-         can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
-                             controller.i_q_filt*KT*GR, state_after, fsmstate->next_state);
-     }
-     hip_prev_cal_state = state_after;
- }
-
 
 
 void hall_debug_mode(FSMStruct * fsmstate){

@@ -12,7 +12,7 @@
 #include "math_ops.h"
 #include "hw_config.h"
 #include "user_config.h"
-#include "abad_calibration.h"
+#include "hall_calibration.h"
 #include <stdio.h>
 
 void set_dtc(ControllerStruct *controller){
