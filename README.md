@@ -368,7 +368,7 @@ Startup probe and reset behavior:
 4. Sweep through the full mechanical range slowly and confirm repeated transitions:
    - AB/AD axis should show A/B edges near expected magnet locations.
    - If no edges appear in sweep, calibration will fail in probe phase.
-5. Press `ESC` to return to menu and then run AB/AD calibration (`a`) once transitions are confirmed.
+5. Press `ESC` to return to menu and then run calibration with `h` once transitions are confirmed (the AB/AD path is auto-selected from `MOTOR_POSITION`).
 
 ## Motor breakout pinout (motor driver)
 
@@ -396,6 +396,20 @@ For porting to another board, start here:
 2. CubeMX `.ioc` peripheral setup
 3. `user_config.h` defaults/limits for motor and robot mechanics
 4. calibration constants and FSM mode defaults
+
+## Changelog
+
+### 2026-06-16
+
+- **AB/AD calibration is no longer a separate FSM state.** It now runs as an internal flag inside the existing `HALL_CALIBRATE` state, with HIP vs AB/AD selected from `MOTOR_POSITION`. This keeps a single calibration entry point (`h` / `FC_HALL_CAL`) for both sensing layouts and simplifies the sbRIO communication contract (`eb249ca`, `de077c9`).
+- **State reporting unified.** `abad_cal_state` was merged into `hall_cal_state`, and `abad_encoder_set_zero` was merged into `encoder_set_zero`, so callers read a single calibration status / zeroing path regardless of motor role (`de077c9`, `70791fc`).
+- **New read-only CAN function code `FC_GET_STATE` (6).** Polls FSM `state` and `hall_cal_state` via `pack_reply_default` without calling `update_fsm` or any `unpack_*`, so a status poll can never mutate the FSM from any mode (`68ebea8`).
+
+### 2026-06-15
+
+- **CAN/UART hall-calibration parity.** The CAN and UART entry paths now run the same hall-calibration routine, removing path-specific behavior that previously lived in `stm32f4xx_it.c` (`e2071aa`).
+- **Auto set-zero before hall calibration + richer logging.** Added `can_send_cal_status()` for streaming calibration status over CAN, an automatic set-zero ahead of hall cal, and additional progress logging through the routine (`8bc5bad`).
+- **Initial-velocity fix.** Moved the `angle_multiturn` correction out of hall cal and into `encoder_set_zero`, and cleared additional stale velocity data at reset so a spurious initial velocity is not reported after calibration/reset (`5d8a4ab`, `88ec20a`).
 
 ## Related links
 
