@@ -18,7 +18,8 @@
 #include <string.h>
 
 /* Forward declarations */
-static void abad_cal_find_bottom_sensor(FSMStruct * fsmstate);
+static void abad_cal_find_first_sensor(FSMStruct * fsmstate);
+static void abad_cal_backout(FSMStruct * fsmstate);
 static void abad_cal_find_zero(FSMStruct * fsmstate);
 static void abad_cal_center_sample_reverse(FSMStruct * fsmstate);
 static void abad_cal_center_zero(FSMStruct * fsmstate);
@@ -62,7 +63,7 @@ uint8_t abad_joint_angle_in_limits(float joint_angle){
 }
 
 /* Calibration state */
-static uint8_t abad_cal_phase = ABAD_CAL_PHASE_FIND_BOTTOM_SENSOR;
+static uint8_t abad_cal_phase = ABAD_CAL_PHASE_FIND_FIRST_SENSOR;
 static int abad_motion_dir = 1;
 static uint8_t abad_bottom_sensor = 0;
 static float abad_phase_start_joint = 0.0f;
@@ -142,8 +143,10 @@ void abad_hall_calibrate(FSMStruct * fsmstate) {
         }
     }
 
-    if (abad_cal_phase == ABAD_CAL_PHASE_FIND_BOTTOM_SENSOR) {
-        abad_cal_find_bottom_sensor(fsmstate);
+    if (abad_cal_phase == ABAD_CAL_PHASE_FIND_FIRST_SENSOR) {
+        abad_cal_find_first_sensor(fsmstate);
+    } else if (abad_cal_phase == ABAD_CAL_PHASE_BACKOUT) {
+        abad_cal_backout(fsmstate);
     } else if (abad_cal_phase == ABAD_CAL_PHASE_FIND_ZERO) {
         abad_cal_find_zero(fsmstate);
     } else if (abad_cal_phase == ABAD_CAL_PHASE_CENTER_SAMPLE_REVERSE) {
@@ -170,7 +173,7 @@ void abad_cal_reset(void){
     abad_cal.abad_present_pos = abad_controller_to_joint_angle(controller.theta_mech);
     abad_cal.bottom_transition_count = 0;
 
-    abad_cal_phase = ABAD_CAL_PHASE_FIND_BOTTOM_SENSOR;
+    abad_cal_phase = ABAD_CAL_PHASE_FIND_FIRST_SENSOR;
     abad_motion_dir = abad_calibration_direction();
     abad_bottom_sensor = abad_bottom_sensor_id();
     abad_phase_start_joint = abad_cal.abad_present_pos;
@@ -187,41 +190,103 @@ void abad_cal_reset(void){
     abad_center_trigger_reverse = 0.0f;
     abad_center_reverse_armed = 0;
     abad_center_zero_cycles = 0;
-    // If the bottom sensor is already active at startup we're already in its magnet
-    // zone — the layout means this zone leads directly into the both-active zone with
-    // no gap. Skip FIND_BOTTOM_SENSOR and go straight to FIND_ZERO so we sweep
-    // forward until both sensors are active (the actual zero).
-    uint8_t bottom_at_start = (abad_bottom_sensor == 0)
-        ? (abad_cal.hall_a_input == 0)
-        : (abad_cal.hall_b_input == 0);
-    if (bottom_at_start) {
-        abad_cal_phase = ABAD_CAL_PHASE_FIND_ZERO;
-        printf("AB/AD Cal: bottom sensor active at start, proceeding directly to zero search\r\n");
-    }
+    // FIND_FIRST_SENSOR inspects the live sensor state on its first cycle and picks the
+    // correct direction (or backs out of the both-active zone), so no start-position
+    // special-casing is needed here.
 }
 
-static void abad_cal_find_bottom_sensor(FSMStruct * fsmstate) {
+/*
+ * Initial upward movement. Move up until a hall sensor is detected, then branch on
+ * which sensor(s) are active:
+ *   A. both active     -> BACKOUT downward to a clean edge before centering.
+ *   B. bottom only     -> continue upward (FIND_ZERO, up) until both are active.
+ *   C. top only        -> reverse and move downward (FIND_ZERO, down) until both active.
+ */
+static void abad_cal_find_first_sensor(FSMStruct * fsmstate) {
     float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
     float traveled_mech = fabsf(abad_controller_to_joint_angle(joint_theta - abad_phase_start_joint));
-    uint8_t bottom_active = (abad_bottom_sensor == 0) ? abad_sensor_a_active() : abad_sensor_b_active();
+    uint8_t hall_a_active = abad_sensor_a_active();
+    uint8_t hall_b_active = abad_sensor_b_active();
+    uint8_t both_active = (hall_a_active && hall_b_active);
+    uint8_t bottom_active = (abad_bottom_sensor == 0) ? hall_a_active : hall_b_active;
+    uint8_t top_active = (abad_bottom_sensor == 0) ? hall_b_active : hall_a_active;
+
+    int up_dir = abad_calibration_direction();
+
+    if (both_active) {
+        // Case A: already inside the both-active zone. Reverse downward and clear the
+        // zone so the centering sweep can approach the lower edge cleanly.
+        abad_motion_dir = -up_dir;
+        abad_cal_phase = ABAD_CAL_PHASE_BACKOUT;
+        abad_phase_start_joint = joint_theta;
+        printf("AB/AD Cal: both sensors active, backing out downward before centering\r\n");
+        return;
+    }
 
     if (bottom_active) {
+        // Case B: bottom sensor found while moving up. Continue upward into the zone.
+        abad_motion_dir = up_dir;
         abad_cal_phase = ABAD_CAL_PHASE_FIND_ZERO;
         abad_cal.bottom_transition_count = 0;
         abad_phase_start_joint = joint_theta;
-        printf("AB/AD Cal: detected %s sensor, continuing toward zero\r\n",
-               abad_bottom_sensor == 0 ? "A(bottom)" : "B(bottom)");
+        abad_prev_both_active = 0;
+        printf("AB/AD Cal: detected %s (bottom) sensor, continuing upward toward zero\r\n",
+               abad_bottom_sensor == 0 ? "A" : "B");
+        return;
+    }
+
+    if (top_active) {
+        // Case C: top sensor found first (started above the zone). Reverse and move down.
+        abad_motion_dir = -up_dir;
+        abad_cal_phase = ABAD_CAL_PHASE_FIND_ZERO;
+        abad_cal.bottom_transition_count = 0;
+        abad_phase_start_joint = joint_theta;
+        abad_prev_both_active = 0;
+        printf("AB/AD Cal: detected %s (top) sensor, reversing downward toward zero\r\n",
+               abad_bottom_sensor == 0 ? "B" : "A");
         return;
     }
 
     if (traveled_mech >= ABAD_PROBE_TRAVEL_RAD) {
-        abad_cal_fail(fsmstate, "AB/AD calibration failed - bottom sensor not detected within 30 deg");
+        abad_cal_fail(fsmstate, "AB/AD calibration failed - no hall sensor detected within 30 deg");
         return;
     }
 
     float step = ABAD_CAL_SPEED * DT;
     float joint_pcmd = abad_controller_to_joint_angle(abad_cal.abad_cal_pcmd);
-    joint_pcmd += abad_motion_dir * step;
+    joint_pcmd += up_dir * step;
+    joint_pcmd = abad_clamp_joint_angle(joint_pcmd);
+    abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_pcmd);
+    controller.p_des = abad_cal.abad_cal_pcmd;
+}
+
+/*
+ * Case A helper: both sensors were active on entry. Move downward until the both-active
+ * zone is cleared, then resume the normal upward sweep so FIND_ZERO records the lower
+ * edge as its forward trigger.
+ */
+static void abad_cal_backout(FSMStruct * fsmstate) {
+    float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
+    float traveled_mech = fabsf(abad_controller_to_joint_angle(joint_theta - abad_phase_start_joint));
+    uint8_t both_active = abad_sensor_a_active() && abad_sensor_b_active();
+
+    if (!both_active) {
+        abad_motion_dir = abad_calibration_direction();  // resume upward
+        abad_cal_phase = ABAD_CAL_PHASE_FIND_ZERO;
+        abad_cal.bottom_transition_count = 0;
+        abad_phase_start_joint = joint_theta;
+        abad_prev_both_active = 0;
+        printf("AB/AD Cal: cleared both-active zone, sweeping up for center\r\n");
+        return;
+    }
+
+    if (traveled_mech >= ABAD_PROBE_TRAVEL_RAD) {
+        abad_cal_fail(fsmstate, "AB/AD calibration failed - could not exit both-active zone within 30 deg");
+        return;
+    }
+
+    float joint_pcmd = abad_controller_to_joint_angle(abad_cal.abad_cal_pcmd);
+    joint_pcmd += abad_motion_dir * DT * ABAD_CAL_SPEED;
     joint_pcmd = abad_clamp_joint_angle(joint_pcmd);
     abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_pcmd);
     controller.p_des = abad_cal.abad_cal_pcmd;
@@ -370,8 +435,10 @@ static uint8_t abad_bottom_sensor_id(void) {
 
 static const char *abad_phase_name(uint8_t phase) {
     switch (phase) {
-        case ABAD_CAL_PHASE_FIND_BOTTOM_SENSOR:
-            return "FIND_BOTTOM";
+        case ABAD_CAL_PHASE_FIND_FIRST_SENSOR:
+            return "FIND_FIRST";
+        case ABAD_CAL_PHASE_BACKOUT:
+            return "BACKOUT";
         case ABAD_CAL_PHASE_FIND_ZERO:
             return "FIND_ZERO";
         case ABAD_CAL_PHASE_CENTER_SAMPLE_REVERSE:
