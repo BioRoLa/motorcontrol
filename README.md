@@ -120,11 +120,15 @@ Control sequence:
 1. Enter Hall Calibration (`h`) from menu.
 2. FSM routes to `HALL_CALIBRATE` for both paths; `MOTOR_POSITION` selects HIP or ABAD internally.
 3. AB/AD calibration validates motor role (must not be HIP).
-4. `FIND_BOTTOM_SENSOR`:
-   - move in configured AB/AD direction
-   - require expected bottom sensor detection within `ABAD_PROBE_TRAVEL_DEG`
+4. `FIND_FIRST_SENSOR`:
+   - move upward in the configured AB/AD direction until a hall sensor is detected within `ABAD_PROBE_TRAVEL_DEG`
+   - branch on which sensor(s) are active at detection:
+     - **both active**: enter `BACKOUT` (move downward until the both-active zone clears), then resume the upward sweep so centering sees a clean lower edge
+     - **bottom sensor only**: continue upward into the zone
+     - **top sensor only**: reverse and move downward into the zone
+   - fail if no sensor is seen within `ABAD_PROBE_TRAVEL_DEG`
 5. `FIND_ZERO`:
-   - continue moving until first `A && B` trigger (forward trigger sample)
+   - continue moving toward the zone (up or down, as chosen above) until the first `A && B` trigger (forward trigger sample)
 6. `CENTER_SAMPLE_REVERSE`:
    - overtravel a few degrees
    - reverse direction
@@ -341,9 +345,9 @@ This allows orientation-dependent direction handling without forking firmware pe
 
 Startup probe and reset behavior:
 
-- On entering `HALL_CALIBRATE` (ABAD path), the firmware calls `abad_cal_reset()` to clear any previous transition history and initialize the internal command/estimate state so calibration starts cleanly.
-- **Active direction probe**: before collecting hall transitions, the firmware probes the configured calibration direction (`ABAD_CAL_DIR` with motor-role inversion) using a short fixed-angle step (`ABAD_PROBE_STEP_DEG`) over `ABAD_PROBE_CYCLES` cycles. If hall transitions are detected, that direction is locked for the rest of calibration. If not, it performs exactly one opposite-direction attempt. If neither attempt produces transitions, calibration aborts with an explicit probe failure message.
-- This active probe **requires no assumptions about encoder accuracy** at startup and automatically selects the productive direction regardless of mechanical position or encoder reference quality.
+- On entering `HALL_CALIBRATE` (ABAD path), the firmware calls `abad_cal_reset()` to re-sample the encoder from the live position, clear any previous transition history, initialize the internal command/estimate state, and set the phase to `FIND_FIRST_SENSOR` so calibration starts cleanly.
+- **Direction selection**: the initial "upward" direction and the expected bottom sensor are derived from `MOTOR_POSITION` (`abad_calibration_direction()` / `abad_bottom_sensor_id()`). The firmware then moves upward until a hall sensor is detected within `ABAD_PROBE_TRAVEL_DEG` and resolves which way to approach the both-active zone from the sensor state at that point (see `FIND_FIRST_SENSOR` above): continue up (bottom sensor), reverse down (top sensor), or back out first (both active). If no sensor is seen within `ABAD_PROBE_TRAVEL_DEG`, calibration aborts with an explicit failure message.
+- Because the approach direction is chosen from the actual sensor state rather than an assumed starting position, calibration recovers whether the joint begins below, inside, or above the both-active zone.
 
 ### Hall debug mode
 
@@ -398,6 +402,10 @@ For porting to another board, start here:
 4. calibration constants and FSM mode defaults
 
 ## Changelog
+
+### 2026-07-13
+
+- **AB/AD find phase now picks its approach direction from the sensors.** The old `FIND_BOTTOM_SENSOR` phase (which only ever moved up and only looked for the bottom sensor) was replaced by `FIND_FIRST_SENSOR`. After the initial upward movement detects a hall sensor, it branches: both sensors active → back out downward to a clean edge (new `BACKOUT` phase) then sweep up to center; bottom sensor only → continue upward to the both-active zone; top sensor only → reverse and move downward to the zone. This lets calibration recover when the joint starts inside or above the both-active zone instead of failing the 30° probe or stalling at the limit. The `CENTER_SAMPLE_REVERSE`/`CENTER_ZERO` centering is unchanged and works symmetrically for both approach directions. The now-redundant "bottom sensor active at start" special-case in `abad_cal_reset()` was removed since `FIND_FIRST_SENSOR` handles every start condition on its first cycle.
 
 ### 2026-06-16
 

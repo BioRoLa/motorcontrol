@@ -19,10 +19,11 @@
 #include "calibration.h"
 
 /* Calibration phases */
-#define ABAD_CAL_PHASE_FIND_BOTTOM_SENSOR   0  // Move upward until the bottom sensor sees a magnet
-#define ABAD_CAL_PHASE_FIND_ZERO            1  // Continue upward until both sensors are active
+#define ABAD_CAL_PHASE_FIND_FIRST_SENSOR    0  // Move upward until a hall sensor is seen, then decide direction
+#define ABAD_CAL_PHASE_FIND_ZERO            1  // Move toward the both-active zone (up or down) until both are active
 #define ABAD_CAL_PHASE_CENTER_SAMPLE_REVERSE 2 // Reverse and sample both-active trigger in opposite direction
 #define ABAD_CAL_PHASE_CENTER_ZERO          3  // Move to midpoint of forward/reverse trigger samples
+#define ABAD_CAL_PHASE_BACKOUT              4  // Both sensors active on entry: back out downward to a clean edge
 
 /* Mechanical limits for AB/AD joint */
 #define ABAD_LIMIT_MIN_DEG     -85.0f
@@ -38,8 +39,11 @@
 #define ABAD_CAL_ALIGN_TOL_RAD (ABAD_CAL_ALIGN_TOL_DEG * PI_F / 180.0f)
 
 /* Simplified AB/AD calibration configuration.
- * Step 1: find the expected bottom sensor within 30 degrees of upward travel.
- * Step 2: keep moving upward until both sensors detect simultaneously.
+ * Step 1: move upward until a hall sensor is detected within 30 degrees, then:
+ *   A. both sensors active -> back out downward to a clean edge, then center.
+ *   B. bottom sensor only  -> continue upward until both sensors are active.
+ *   C. top sensor only     -> reverse and move downward until both are active.
+ * Step 2: center on the both-active zone.
  * Fail if the bottom sensor toggles more than three times before reaching zero. */
 #define ABAD_PROBE_TRAVEL_DEG    30.0f
 #define ABAD_PROBE_TRAVEL_RAD    (ABAD_PROBE_TRAVEL_DEG * PI_F / 180.0f)
