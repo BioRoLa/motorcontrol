@@ -44,10 +44,11 @@
  *   B. bottom sensor only  -> continue upward until both sensors are active.
  *   C. top sensor only     -> reverse and move downward until both are active.
  * Step 2: center on the both-active zone.
- * Fail if the bottom sensor toggles more than three times before reaching zero. */
+ * The zero search is bounded by mechanical travel (it fails only if it reaches a
+ * mechanical limit without both sensors becoming active), so starting far from zero
+ * and passing several magnets on the way in is not an error. */
 #define ABAD_PROBE_TRAVEL_DEG    30.0f
 #define ABAD_PROBE_TRAVEL_RAD    (ABAD_PROBE_TRAVEL_DEG * PI_F / 180.0f)
-#define ABAD_MAX_BOTTOM_TRANSITIONS 3
 
 /*
  * hall_calibrate()

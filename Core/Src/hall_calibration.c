@@ -302,12 +302,12 @@ static void abad_cal_find_zero(FSMStruct * fsmstate) {
         : (abad_cal.hall_b_input != abad_cal.hall_b_preinput);
 
     if (bottom_transition) {
+        // Counted for diagnostics only. Starting from a very low position, the bottom
+        // sensor legitimately passes several magnets before reaching the both-active
+        // zone, so the sweep is bounded by mechanical travel (below) rather than by a
+        // fixed transition count.
         abad_cal.bottom_transition_count++;
         printf("AB/AD Cal: bottom sensor transition %u\r\n", (unsigned)abad_cal.bottom_transition_count);
-        if (abad_cal.bottom_transition_count > ABAD_MAX_BOTTOM_TRANSITIONS) {
-            abad_cal_fail(fsmstate, "AB/AD calibration failed - bottom sensor transitioned too many times before zero");
-            return;
-        }
     }
 
     if (!abad_prev_both_active && both_active) {
@@ -324,6 +324,13 @@ static void abad_cal_find_zero(FSMStruct * fsmstate) {
 
     float joint_pcmd = abad_controller_to_joint_angle(abad_cal.abad_cal_pcmd);
     joint_pcmd += abad_motion_dir * DT * ABAD_CAL_SPEED;
+    if (joint_pcmd > ABAD_LIMIT_MAX_RAD || joint_pcmd < ABAD_LIMIT_MIN_RAD) {
+        // Swept the full mechanical travel without ever seeing both sensors active.
+        // This is the genuine failure (wrong direction or dead sensor), independent of
+        // how many magnets the bottom sensor passed on the way.
+        abad_cal_fail(fsmstate, "AB/AD calibration failed - reached mechanical limit before both sensors active");
+        return;
+    }
     joint_pcmd = abad_clamp_joint_angle(joint_pcmd);
     abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_pcmd);
     controller.p_des = abad_cal.abad_cal_pcmd;
