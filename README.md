@@ -403,9 +403,10 @@ For porting to another board, start here:
 
 ## Changelog
 
-### 2026-07-13
+### 2026-07-16
 
 - **AB/AD find phase now picks its approach direction from the sensors.** The old `FIND_BOTTOM_SENSOR` phase (which only ever moved up and only looked for the bottom sensor) was replaced by `FIND_FIRST_SENSOR`. After the initial upward movement detects a hall sensor, it branches: both sensors active → back out downward to a clean edge (new `BACKOUT` phase) then sweep up to center; bottom sensor only → continue upward to the both-active zone; top sensor only → reverse and move downward to the zone. This lets calibration recover when the joint starts inside or above the both-active zone instead of failing the 30° probe or stalling at the limit. The `CENTER_SAMPLE_REVERSE`/`CENTER_ZERO` centering is unchanged and works symmetrically for both approach directions. The now-redundant "bottom sensor active at start" special-case in `abad_cal_reset()` was removed since `FIND_FIRST_SENSOR` handles every start condition on its first cycle.
+- **AB/AD zero search is now bounded by mechanical travel instead of a bottom-sensor toggle count.** The old `ABAD_MAX_BOTTOM_TRANSITIONS` guard (fail after 3 bottom-sensor transitions) tripped when starting from a very low position, because the bottom sensor legitimately passes several magnets before reaching the both-active zone. `FIND_ZERO` now fails only if the sweep reaches a mechanical limit (`ABAD_LIMIT_MIN/MAX_RAD`) without both sensors ever becoming active — the genuine wrong-direction / dead-sensor failure. The transition count is still logged for diagnostics.
 
 ### 2026-06-16
 
