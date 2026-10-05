@@ -243,19 +243,21 @@ void can_send_cal_status(float p, float v, float t, int cal_state, int fsm_state
     HAL_CAN_AddTxMessage(&CAN_H, &can_tx.tx_header, can_tx.data, &TxMailbox);
 }
 
-/// CAN Command Packet Structure ///
-/// 16 bit position command, between -4*pi and 4*pi
-/// 12 bit velocity command, between -30 and + 30 rad/s
-/// 12 bit kp, between 0 and 500 N-m/rad
-/// 12 bit kd, between 0 and 100 N-m*s/rad
-/// 12 bit feed forward torque, between -18 and 18 N-m
+/// CAN Command Packet Structure (FC_CONTROL_CMD) ///
+/// 16 bit position command, between P_MIN and P_MAX (0 .. 2*pi)
+/// 12 bit kp, between 0 and KP_MAX N-m/rad
+/// 12 bit ki, between 0 and KI_MAX
+/// 12 bit kd, between 0 and KD_MAX N-m*s/rad
+/// 12 bit feed forward torque, between -I_MAX*KT*GR and I_MAX*KT*GR N-m
+/// The host (fpga_driver can_packet.h) packs with fixed ranges; KP/KI/KD_MAX
+/// must match them or every gain is silently rescaled.
 /// CAN Packet is 8 8-bit words
 /// Formatted as follows.  For each quantity, bit 0 is LSB
 /// 0: [position[15-8]]
 /// 1: [position[7-0]]
-/// 2: [velocity[11-4]]
-/// 3: [velocity[3-0], kp[11-8]]
-/// 4: [kp[7-0]]
+/// 2: [kp[11-4]]
+/// 3: [kp[3-0], ki[11-8]]
+/// 4: [ki[7-0]]
 /// 5: [kd[11-4]]
 /// 6: [kd[3-0], torque[11-8]]
 /// 7: [torque[7-0]]

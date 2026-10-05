@@ -158,19 +158,19 @@ extern "C" {
 #define ADDR_KP_MAX				25									// Max position gain (N-m/rad)
 #define CMD_KP_MAX				'k'									// Max position gain (N-m/rad)
 #define MIN_KP_MAX				0.0f								// Max position gain (N-m/rad)
-#define MAX_KP_MAX				GLOBAL_MAX_VALUE					// Max position gain (N-m/rad)
+#define MAX_KP_MAX				500.0f								// Must not exceed the host's 12-bit kp scale (fpga_driver can_packet.h KP_MAX)
 
 #define NAME_KI_MAX				"KI_MAX"
 #define ADDR_KI_MAX				26
 #define CMD_KI_MAX				'i'
 #define MIN_KI_MAX				0.0f
-#define MAX_KI_MAX				GLOBAL_MAX_VALUE
+#define MAX_KI_MAX				10.0f								// fpga_driver can_packet.h KI_MAX
 
 #define NAME_KD_MAX				"KD_MAX"							// Max velocity gain (N-m/rad/s)
 #define ADDR_KD_MAX				27									// Max velocity gain (N-m/rad/s)
 #define CMD_KD_MAX				'd'									// Max velocity gain (N-m/rad/s)
 #define MIN_KD_MAX				0.0f								// Max velocity gain (N-m/rad/s)
-#define MAX_KD_MAX				GLOBAL_MAX_VALUE					// Max velocity gain (N-m/rad/s)
+#define MAX_KD_MAX				5.0f								// fpga_driver can_packet.h KD_MAX
 
 #define NAME_HALL_CAL_OFFSET    "HALL_CAL_OFFSET"
 #define ADDR_HALL_CAL_OFFSET    28

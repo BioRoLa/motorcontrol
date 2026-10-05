@@ -339,7 +339,16 @@ void torque_control(ControllerStruct *controller){
 			err = controller->p_des - pos;
 		}
 	}
-	in_err = in_err + err;
+	// Anti-windup: with ki == 0 (the KI_MAX default) the integrator used to
+	// grow unbounded, so a later non-zero ki would apply it as a torque step.
+	// Keep ki*in_err within the commandable torque.
+	if (controller->ki > 0.0f) {
+		float in_err_max = (I_MAX*KT*GR) / controller->ki;
+		in_err = fminf(fmaxf(in_err + err, -in_err_max), in_err_max);
+	}
+	else {
+		in_err = 0.0f;
+	}
 
     float torque_ref = controller->kp*(err) + controller->t_ff + controller->ki*(in_err) + controller->kd*(-controller->dtheta_mech);
     controller->i_q_des = torque_ref/(KT*GR);
