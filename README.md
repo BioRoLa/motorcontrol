@@ -7,9 +7,7 @@ This repo targets STM32CubeIDE-generated projects and is designed for practical 
 - FOC current loop
 - position/torque control
 - encoder calibration
-- single hall calibration
-- AB/AD dual-hall calibration support
-- manual hall sensor debug mode
+- hall-sensor zero calibration for hip (one sensor) and AB/AD (two sensors) joints, plus a hall debug mode: see [HALL_CALIBRATION.md](HALL_CALIBRATION.md)
 - CAN + UART configuration interfaces
 
 ## Quick start
@@ -17,8 +15,7 @@ This repo targets STM32CubeIDE-generated projects and is designed for practical 
 1. Build and flash with STM32CubeIDE.
 2. Open a UART terminal and confirm the menu prints.
 3. Enter setup mode (`s`) and verify key parameters (current limits, gains, CAN IDs).
-4. Run needed calibration:
-   - hall calibration: `h` (auto-selects HIP vs AB/AD from `MOTOR_POSITION`)
+4. Set `MOTOR_POSITION` (`P`) and run hall calibration with `h` ([HALL_CALIBRATION.md](HALL_CALIBRATION.md)).
 5. Enter motor mode (`m`) and begin command testing.
 
 ## Hardware + Toolchain
@@ -42,8 +39,9 @@ Hardware pin/peripheral mappings and low-level constants are centralized in:
 - `Core/Src/can.c`: CAN packet parsing/packing and register access protocol
 - `Core/Src/position_sensor.c`: SPI encoder sampling and processing
 - `Core/Src/calibration.c`: encoder phase ordering and calibration
-- `Core/Src/hall_calibration.c`: hall calibration logic for both HIP (single sensor) and AB/AD (dual sensor) joints
+- `Core/Src/hall_calibration.c`: hall calibration for hip and AB/AD joints ([HALL_CALIBRATION.md](HALL_CALIBRATION.md))
 - `Core/Inc/user_config.h` + `Core/Src/user_config.c`: persistent register map and validation
+- `HALL_CALIBRATION.md`: hall calibration, hall debug mode, AB/AD bench test
 
 ## Build and flash
 
@@ -56,7 +54,7 @@ Hardware pin/peripheral mappings and low-level constants are centralized in:
 
 ### Makefile path
 
-A generated makefile is present under `Debug/makefile` if you prefer CLI workflows after Cube generation.
+STM32CubeIDE writes a makefile to `Debug/makefile` when it builds the project (the `Debug/` folder is not in git). After one IDE build you can rebuild from the command line with `make -C Debug`.
 
 ## Runtime architecture
 
@@ -75,57 +73,9 @@ The control flow is interrupt-driven and state-machine controlled.
   - `HALL_CALIBRATE`
   - `HALL_DEBUG_MODE`
 
-## Calibration control logic
+## Hall calibration
 
-This firmware has two hall-based calibration paths with different sensing layouts.
-
-```text
-Hip hall calibration (single sensor)
-
-MENU_MODE --(h)--> HALL_CALIBRATE
-HALL_CALIBRATE:
-	read hall -> detect edges -> compute midpoint(+offset) -> align target
-	| success: encoder_set_zero + state=SUCCESS -> MOTOR_MODE
-	| fail: exceeded search window -> state=FAIL -> MENU_MODE
-```
-
-## Hip hall calibration (`HALL_CALIBRATE`)
-
-Implemented in `hall_calibration.c` (`hall_calibrate`) using a single binary hall input.
-
-Control sequence:
-
-1. Enter mode from FSM (`HALL_CALIBRATE`) and set calibration PID gains (`HALL_CAL_KP/KI/KD`).
-2. Read hall input each control cycle.
-3. Detect edges by comparing current and previous hall state.
-4. Record two transition positions:
-   - magnet entering sensor window (1 -> 0)
-   - magnet leaving sensor window (0 -> 1)
-5. Compute midpoint between those two mechanical positions.
-6. Apply optional offset (`HALL_CAL_OFFSET`) and move slowly (`HALL_CAL_SPEED`) toward target.
-7. When target reached:
-   - set success code
-   - call zeroing path (`encoder_set_zero`)
-   - transition back to motor mode
-8. If motion exceeds expected search range, fail and return to menu.
-
-Key idea: the hip routine finds the center of one hall detection window and uses that as the zero reference (plus optional offset).
-
-## AB/AD dual-hall calibration (`HALL_CALIBRATE`, ABAD path)
-
-Implemented in `hall_calibration.c` (`abad_hall_calibrate`) using two binary hall sensors (`HALL_A_IO`, `HALL_B_IO`) and four magnets. Full description of the layout, sensor states, phases, log lines and constants: [docs/abad_hall_cal_setup.md](docs/abad_hall_cal_setup.md). Bench procedure: [docs/abad_hall_cal_test.md](docs/abad_hall_cal_test.md).
-
-Control sequence:
-
-1. Enter Hall Calibration (`h`) from menu, or CAN `FC_HALL_CAL`. Both zero the encoder first; `MOTOR_POSITION` != 0 selects the AB/AD path.
-2. `FIND_FIRST_SENSOR`: pick a direction from the sensors active at start. Both active: `BACKOUT` toward the B side, then sweep toward the A side. A only: toward the A side. B only: toward the B side. Neither: probe toward the A side (≤ `ABAD_PROBE_TRAVEL_DEG`).
-3. `FIND_ZERO`: sweep until `A && B` (forward trigger). Moving toward a side, if that side's sensor pulses on and off before the zone, reverse once (each sensor only sees inner magnets on its own side).
-4. `CENTER_SAMPLE_REVERSE`: cross the zone to its far edge, overtravel `ABAD_CENTER_OVERTRAVEL_DEG`, reverse, and catch `A && B` again from the far side (reverse trigger).
-5. `CENTER_ZERO`: drive to the midpoint of the two triggers, settle, `encoder_set_zero()`, then `MOTOR_MODE`.
-
-Directions are in motor angle (`ABAD_A_SIDE_DIR` / `ABAD_B_SIDE_DIR`). The hall board and magnets turn with the motor, so the same logic runs on every AB/AD leg; `MOTOR_POSITION` 1 vs 2 does not change calibration.
-
-Key idea: AB/AD zero is the midpoint of two entries into the same both-active zone, one from each side.
+Hip and AB/AD hall calibration, the hall debug mode, the AB/AD bench test and the related registers are documented in [HALL_CALIBRATION.md](HALL_CALIBRATION.md).
 
 ## Interfaces
 
@@ -140,8 +90,8 @@ High-level menu commands in `fsm.h`:
 - `e`: encoder display mode
 - `s`: setup mode
 - `z`: set encoder zero
-- `h`: hall calibration mode
-- `q`: hall sensor debug mode (raw + active prints for HIP/A/B halls)
+- `h`: hall calibration ([HALL_CALIBRATION.md](HALL_CALIBRATION.md))
+- `q`: hall sensor debug mode ([HALL_CALIBRATION.md](HALL_CALIBRATION.md#hall-debug-mode-q))
 - `ESC` (`27`): return to menu from active mode
 
 ### UART parser behavior
@@ -179,19 +129,13 @@ Most-used writable prefixes exposed in `enter_setup_state` and `user_config.h`:
 - `p`: max position setpoint (`P_MAX`)
 - `v`: max velocity setpoint (`V_MAX`)
 - `T`: max torque setpoint (`T_MAX`)
-- `k`, `i`, `d`: max position-loop gains (`KP_MAX`, `KI_MAX`, `KD_MAX`)
+- `k`, `i`, `d`: max position-loop gains (`KP_MAX` ≤ 500, `KI_MAX` ≤ 10, `KD_MAX` ≤ 5, matching the host's CAN packing ranges)
 - `X`, `Y`, `Z`: default motor-mode gains (`MOTOR_MODE_KP/KI/KD`)
 - `f`: field-weakening current limit (`I_FW_MAX`)
 - `c`: continuous current limit (`I_MAX_CONT`)
 - `a`: calibration current (`I_CAL`)
-- `P`: motor position role (`MOTOR_POSITION`)
-- `r`: hall calibration direction (`HALL_CAL_DIR`)
-- `e`: hall calibration offset (`HALL_CAL_OFFSET`)
-- `h`: hall calibration speed (`HALL_CAL_SPEED`)
-- `K`, `I`, `D`: hall calibration gains (`HALL_CAL_KP/KI/KD`)
-- `O`: AB/AD calibration offset (`ABAD_CAL_OFFSET`)
-- `S`: AB/AD calibration speed (`ABAD_CAL_SPEED`)
-- `J`, `U`, `V`: AB/AD calibration gains (`ABAD_CAL_KP/KI/KD`)
+- `P`: motor role (`MOTOR_POSITION`: 0 = hip, 1 = AB/AD)
+- hall calibration registers (`r`, `e`, `h`, `K`, `I`, `D`, `S`, `J`, `U`, `V`): see [HALL_CALIBRATION.md](HALL_CALIBRATION.md#registers)
 - `n`: CAN node ID (`CAN_ID`)
 - `m`: CAN master ID (`CAN_MASTER`)
 - `o`: CAN timeout (`CAN_TIMEOUT`)
@@ -209,34 +153,25 @@ The table below lists all register prefixes that are writable over UART (`CMD_* 
 | `a`    | `I_CAL`           | float | Calibration current                                  |
 | `b`    | `I_BW`            | float | Current loop bandwidth                               |
 | `c`    | `I_MAX_CONT`      | float | Continuous current limit                             |
-| `d`    | `KD_MAX`          | float | Max velocity gain                                    |
-| `e`    | `HALL_CAL_OFFSET` | float | Hall calibration offset                              |
+| `d`    | `KD_MAX`          | float | Max velocity gain (≤ 5)                              |
 | `f`    | `I_FW_MAX`        | float | Field-weakening current limit                        |
 | `g`    | `GR`              | float | Gear ratio                                           |
-| `h`    | `HALL_CAL_SPEED`  | float | Hall calibration speed                               |
-| `i`    | `KI_MAX`          | float | Max integral gain                                    |
-| `k`    | `KP_MAX`          | float | Max position gain                                    |
+| `i`    | `KI_MAX`          | float | Max integral gain (≤ 10)                             |
+| `k`    | `KP_MAX`          | float | Max position gain (≤ 500)                            |
 | `l`    | `I_MAX`           | float | Current limit                                        |
 | `n`    | `CAN_ID`          | int   | CAN node ID                                          |
 | `m`    | `CAN_MASTER`      | int   | CAN master/controller ID                             |
 | `o`    | `CAN_TIMEOUT`     | int   | CAN timeout cycles                                   |
 | `p`    | `P_MAX`           | float | Max position setpoint                                |
-| `P`    | `MOTOR_POSITION`  | int   | Motor role (`0=HIP, 1=ABAD_NORMAL, 2=ABAD_MIRRORED`) |
-| `r`    | `HALL_CAL_DIR`    | int   | Hall calibration direction (`-1` or `1`)             |
+| `P`    | `MOTOR_POSITION`  | int   | Motor role (`0=HIP, 1=AB/AD`)                        |
 | `t`    | `KT`              | float | Torque constant                                      |
 | `v`    | `V_MAX`           | float | Max velocity setpoint (also sets `V_MIN=-V_MAX`)     |
 | `T`    | `T_MAX`           | float | Max torque setpoint (also sets `T_MIN=-T_MAX`)       |
-| `D`    | `HALL_CAL_KD`     | float | Hall calibration derivative gain                     |
-| `I`    | `HALL_CAL_KI`     | float | Hall calibration integral gain                       |
-| `J`    | `ABAD_CAL_KP`     | float | AB/AD calibration proportional gain                  |
-| `K`    | `HALL_CAL_KP`     | float | Hall calibration proportional gain                   |
-| `O`    | `ABAD_CAL_OFFSET` | float | AB/AD calibration offset                             |
-| `S`    | `ABAD_CAL_SPEED`  | float | AB/AD calibration speed                              |
-| `U`    | `ABAD_CAL_KI`     | float | AB/AD calibration integral gain                      |
-| `V`    | `ABAD_CAL_KD`     | float | AB/AD calibration derivative gain                    |
 | `X`    | `MOTOR_MODE_KP`   | float | Default motor-mode proportional gain                 |
 | `Y`    | `MOTOR_MODE_KI`   | float | Default motor-mode integral gain                     |
 | `Z`    | `MOTOR_MODE_KD`   | float | Default motor-mode derivative gain                   |
+
+Hall calibration registers (`r`, `e`, `h`, `K`, `I`, `D`, `S`, `J`, `U`, `V`) are listed in [HALL_CALIBRATION.md](HALL_CALIBRATION.md#registers).
 
 Reserved/unused in UART setup parser:
 
@@ -270,18 +205,19 @@ I_MAX set to 40.000000
 > <ESC>
 <returns to menu>
 
-Calibration command note:
-
-- Use `h` only. Calibration type is auto-selected from `MOTOR_POSITION`.
 ```
+
+Hall calibration (`h`) picks hip or AB/AD from `MOTOR_POSITION`; see [HALL_CALIBRATION.md](HALL_CALIBRATION.md).
 
 ## CAN
 
 CAN supports:
 
-- control command packets (position + gains + feed-forward torque)
+- control command packets (position + gains + feed-forward torque); ignored during hall calibration
 - config read/write packets for int/float register map
 - status reply packets (position/velocity/torque + state/version metadata)
+- read-only state poll `FC_GET_STATE` (6): replies with FSM state and `hall_cal_state` without touching the FSM
+- hall calibration start `FC_HALL_CAL` (3): see [HALL_CALIBRATION.md](HALL_CALIBRATION.md)
 
 Protocol encoding/decoding lives in:
 
@@ -302,77 +238,14 @@ Key files:
 
 On boot, `main.c` sanitizes register values to safe defaults if flash contains invalid/out-of-range data.
 
-## AB/AD support
-
-AB/AD support uses two digital hall sensors and a dedicated calibration flow.
-
-Sensor pins (default):
-
-- `HALL_A_IO`: `GPIOB, GPIO_PIN_14`
-- `HALL_B_IO`: `GPIOB, GPIO_PIN_15`
-- Hip hall (`HALL_IO`): `GPIOC, GPIO_PIN_6`
-
-Motor role selection is runtime-configurable:
-
-- `MOTOR_POS_HIP`
-- `MOTOR_POS_ABAD_NORMAL`
-- `MOTOR_POS_ABAD_MIRRORED`
-
-`MOTOR_POSITION` 0 selects the hip routine; 1 and 2 both select the AB/AD routine, which behaves identically for both (see [docs/abad_hall_cal_setup.md](docs/abad_hall_cal_setup.md)). The 1/2 distinction is kept for reference by the host.
-
-### AB/AD limits and command handling
-
-- Mechanical limits are defined in `Core/Inc/hall_calibration.h`.
-- Calibration operates inside a safer travel window and fails if exceeded.
-- Runtime AB/AD command handling rejects out-of-range commands with printed error output (rather than silently applying them).
-
-Startup probe and reset behavior:
-
-- On entering `HALL_CALIBRATE` (ABAD path), the firmware calls `abad_cal_reset()` to re-sample the encoder from the live position, clear any previous transition history, initialize the internal command/estimate state, and set the phase to `FIND_FIRST_SENSOR` so calibration starts cleanly.
-- **Direction selection**: chosen from the live sensor state in motor angle, independent of `MOTOR_POSITION`, with at most one wrong-side reversal (see the AB/AD calibration section above). Calibration recovers whether the joint begins on either side of, or inside, the both-active zone.
-
-### Hall debug mode
-
-- Enter from menu with `q`.
-- Prints raw hall values and derived active state (`active = raw == 0`) for:
-  - HIP hall (`PC6`)
-  - AB/AD Hall A (`PB14`)
-  - AB/AD Hall B (`PB15`)
-- Prints immediate edge transitions (`prev -> new`) when any hall input changes.
-- Mode is non-driving for safe manual magnet/wiring bring-up. Press `ESC` to return to menu.
-
-#### Hall debug bring-up checklist
-
-1. Power on, open UART, and enter hall debug mode with `q`.
-2. Verify idle values first:
-   - Expected raw values are typically `1 1 1` (HIP, A, B) when no magnet is over a sensor.
-   - Expected active values are `0 0 0` at idle because active is defined as `raw == 0`.
-3. Move a magnet over each sensor one-by-one:
-   - Raw value for that sensor should toggle `1 -> 0` near the detection zone.
-   - Active value for that sensor should toggle `0 -> 1` at the same moment.
-   - UART should print an edge line for each transition.
-4. Sweep through the full mechanical range slowly and confirm repeated transitions:
-   - AB/AD axis should show A/B edges near expected magnet locations: A pulsing on the −angle side of the zone only, B on the +angle side only (see [docs/abad_hall_cal_setup.md](docs/abad_hall_cal_setup.md#measuring-with-q-hall-sensor-debug)).
-   - If no edges appear in sweep, calibration will fail in probe phase.
-5. Press `ESC` to return to menu and then run calibration with `h` once transitions are confirmed (the AB/AD path is auto-selected from `MOTOR_POSITION`).
-
-## Motor breakout pinout (motor driver)
-
-The current firmware pinout mapping for motor-breakout digital hall lines is:
-
-| Breakout pin | MCU pin | Firmware role                            |
-| ------------ | ------- | ---------------------------------------- |
-| D0           | PC6     | Hip hall (`HALL_IO`)                     |
-| D1           | PB14    | AB/AD Hall A (`HALL_A_IO`)               |
-| D2           | PB15    | AB/AD Hall B (`HALL_B_IO`)               |
-| D3           | PC7     | Spare/available (not used by hall logic) |
-
 ## Safety and fault behavior
 
-- CAN timeout can zero commands in motor/hall modes.
+- CAN timeout (`CAN_TIMEOUT` > 0) zeroes commands in motor mode if no control frame arrives in time. It is paused during hall calibration and starts counting when calibration ends.
 - DRV gate enable/disable is managed during state entry/exit.
 - Register writes are range-validated through config update helpers.
 - Invalid configuration commands return explicit status/error codes.
+- Position-loop integrator is clamped so `ki * error` stays within the commandable torque, and reset while `ki == 0`.
+- AB/AD joints (`MOTOR_POSITION` = 1) refuse position commands outside ±85° of the calibrated zero ([HALL_CALIBRATION.md](HALL_CALIBRATION.md#abad-limits-outside-calibration)).
 
 ## Adapting to new hardware
 
@@ -385,23 +258,22 @@ For porting to another board, start here:
 
 ## Changelog
 
-### 2026-07-16
+Hall calibration changes are logged in [HALL_CALIBRATION.md](HALL_CALIBRATION.md#changelog).
 
-- **AB/AD find phase now picks its approach direction from the sensors.** The old `FIND_BOTTOM_SENSOR` phase (which only ever moved up and only looked for the bottom sensor) was replaced by `FIND_FIRST_SENSOR`. After the initial upward movement detects a hall sensor, it branches: both sensors active → back out downward to a clean edge (new `BACKOUT` phase) then sweep up to center; bottom sensor only → continue upward to the both-active zone; top sensor only → reverse and move downward to the zone. This lets calibration recover when the joint starts inside or above the both-active zone instead of failing the 30° probe or stalling at the limit. The `CENTER_SAMPLE_REVERSE`/`CENTER_ZERO` centering is unchanged and works symmetrically for both approach directions. The now-redundant "bottom sensor active at start" special-case in `abad_cal_reset()` was removed since `FIND_FIRST_SENSOR` handles every start condition on its first cycle.
-- **AB/AD zero search is now bounded by mechanical travel instead of a bottom-sensor toggle count.** The old `ABAD_MAX_BOTTOM_TRANSITIONS` guard (fail after 3 bottom-sensor transitions) tripped when starting from a very low position, because the bottom sensor legitimately passes several magnets before reaching the both-active zone. `FIND_ZERO` now fails only if the sweep reaches a mechanical limit (`ABAD_LIMIT_MIN/MAX_RAD`) without both sensors ever becoming active — the genuine wrong-direction / dead-sensor failure. The transition count is still logged for diagnostics.
+### 2026-10-05
+
+- **Gain limits bounded.** `KP_MAX`/`KI_MAX`/`KD_MAX` are limited to 500 / 10 / 5, the host's CAN packing ranges, so a mis-set register can't silently rescale every gain (`8b8ce00`).
+- **Integrator anti-windup.** The position-loop integrator no longer grows without bound while `ki == 0` and is clamped to the commandable torque (`8b8ce00`).
+- **Control frames ignored during hall calibration**, so a stray `FC_CONTROL_CMD` can't overwrite the calibration's `p_des`/`kp` (`8b8ce00`).
 
 ### 2026-06-16
 
-- **HIP and AB/AD hall calibration consolidated into one file.** `abad_calibration.{c,h}` was renamed to `hall_calibration.{c,h}`, and the HIP `hall_calibrate()` routine was moved out of `fsm.c` into it, so both hall-calibration routines now live side by side. `fsm.c` keeps only the FSM dispatch between them.
-- **AB/AD calibration is no longer a separate FSM state.** It now runs as an internal flag inside the existing `HALL_CALIBRATE` state, with HIP vs AB/AD selected from `MOTOR_POSITION`. This keeps a single calibration entry point (`h` / `FC_HALL_CAL`) for both sensing layouts and simplifies the sbRIO communication contract (`eb249ca`, `de077c9`).
-- **State reporting unified.** `abad_cal_state` was merged into `hall_cal_state`, and `abad_encoder_set_zero` was merged into `encoder_set_zero`, so callers read a single calibration status / zeroing path regardless of motor role (`de077c9`, `70791fc`).
 - **New read-only CAN function code `FC_GET_STATE` (6).** Polls FSM `state` and `hall_cal_state` via `pack_reply_default` without calling `update_fsm` or any `unpack_*`, so a status poll can never mutate the FSM from any mode (`68ebea8`).
 
 ### 2026-06-15
 
-- **CAN/UART hall-calibration parity.** The CAN and UART entry paths now run the same hall-calibration routine, removing path-specific behavior that previously lived in `stm32f4xx_it.c` (`e2071aa`).
-- **Auto set-zero before hall calibration + richer logging.** Added `can_send_cal_status()` for streaming calibration status over CAN, an automatic set-zero ahead of hall cal, and additional progress logging through the routine (`8bc5bad`).
-- **Initial-velocity fix.** Moved the `angle_multiturn` correction out of hall cal and into `encoder_set_zero`, and cleared additional stale velocity data at reset so a spurious initial velocity is not reported after calibration/reset (`5d8a4ab`, `88ec20a`).
+- **Initial-velocity fix.** Moved the `angle_multiturn` correction into `encoder_set_zero`, and cleared additional stale velocity data at reset so a spurious initial velocity is not reported after calibration/reset (`5d8a4ab`, `88ec20a`).
+- **CAN init.** Auto retransmission enabled and receive FIFO lock disabled (`1b5b0ee`).
 
 ## Related links
 
