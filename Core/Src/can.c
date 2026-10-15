@@ -248,9 +248,9 @@ void can_send_cal_status(float p, float v, float t, int cal_state, int fsm_state
 /// 12 bit kp, between 0 and KP_MAX N-m/rad
 /// 12 bit ki, between 0 and KI_MAX
 /// 12 bit kd, between 0 and KD_MAX N-m*s/rad
-/// 12 bit feed forward torque, between -I_MAX*KT*GR and I_MAX*KT*GR N-m
-/// The host (fpga_driver can_packet.h) packs with fixed ranges; KP/KI/KD_MAX
-/// must match them or every gain is silently rescaled.
+/// 12 bit feed forward torque, between T_MIN and T_MAX N-m
+/// The host (fpga_driver can_packet.h) packs with fixed ranges; P/T_MIN/MAX and
+/// KP/KI/KD_MAX must match them or every value is silently rescaled.
 /// CAN Packet is 8 8-bit words
 /// Formatted as follows.  For each quantity, bit 0 is LSB
 /// 0: [position[15-8]]
@@ -272,7 +272,7 @@ void unpack_control_cmd(CANRxMessage rx_msg, float *commands){// ControllerStruc
         commands[1] = uint_to_float(kp_int, KP_MIN, KP_MAX, 12);
         commands[2] = uint_to_float(ki_int, KI_MIN, KI_MAX, 12);
         commands[3] = uint_to_float(kd_int, KD_MIN, KD_MAX, 12);
-        commands[4] = uint_to_float(t_int, -I_MAX*KT*GR, I_MAX*KT*GR, 12);
+        commands[4] = uint_to_float(t_int, T_MIN, T_MAX, 12);
     //printf("Received   ");
     //printf("%.3f  %.3f  %.3f  %.3f  %.3f   %.3f", controller->p_des, controller->v_des, controller->kp, controller->kd, controller->t_ff, controller->i_q_ref);
     //printf("\n\r");

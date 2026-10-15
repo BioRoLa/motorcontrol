@@ -166,12 +166,10 @@ int main(void)
   if(isnan(KT)	            || MIN_KT > KT                           || MAX_KT < KT)                           {KT = 0.08f;}
   if(isnan(I_BW)            || MIN_I_BW > I_BW                       || MAX_I_BW < I_BW)				       {I_BW = 1000;}
   if(isnan(I_MAX)           || MIN_I_MAX > I_MAX                     || MAX_I_MAX < I_MAX)					   {I_MAX = 40;}
-  if(isnan(P_MAX)           || MIN_P_MAX > P_MAX                     || MAX_P_MAX < P_MAX)	                   {P_MAX = 6.283f;}
-  if(isnan(P_MIN)           || MIN_P_MIN > P_MIN                     || MAX_P_MIN < P_MIN)	                   {P_MIN = 0.0f;}
-  if(isnan(V_MAX)           || MIN_V_MAX > V_MAX                     || MAX_V_MAX < V_MAX)	                   {V_MAX = 45.0f;}
-  if(isnan(V_MIN)           || MIN_V_MIN > V_MIN                     || MAX_V_MIN < V_MIN)	                   {V_MIN = -45.0f;}
-  if(isnan(T_MAX)           || MIN_T_MAX > T_MAX                     || MAX_T_MAX < T_MAX)                     {T_MAX = 20.0f;}
-  if(isnan(T_MIN)           || MIN_T_MIN > T_MIN                     || MAX_T_MIN < T_MIN)	                   {T_MIN = -20.0f;}
+  /* CAN scaling is fixed to match the host (read-only registers; see CAN_* in user_config.h) */
+  P_MIN = CAN_P_MIN;  P_MAX = CAN_P_MAX;
+  V_MIN = -CAN_V_MAX; V_MAX = CAN_V_MAX;
+  T_MIN = -CAN_T_MAX; T_MAX = CAN_T_MAX;
   if(isnan(KP_MAX)          || MIN_KP_MAX > KP_MAX                   || MAX_KP_MAX < KP_MAX)			       {KP_MAX = 500.0f;}
   if(isnan(KI_MAX)          || MIN_KI_MAX > KI_MAX                   || MAX_KI_MAX < KI_MAX)      			   {KI_MAX = 0.0f;}
   if(isnan(KD_MAX)          || MIN_KD_MAX > KD_MAX                   || MAX_KD_MAX < KD_MAX)				   {KD_MAX = 5.0f;}

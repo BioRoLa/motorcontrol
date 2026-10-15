@@ -156,6 +156,10 @@
 					controller.ki = HALL_CAL_KI;
 					controller.kd = HALL_CAL_KD;
 					enter_motor_mode();
+					hall_cal_reset();
+					hall_cal.hall_cal_state = CODE_HALL_CALIBRATING;
+					can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
+					                    controller.i_q_filt*KT*GR, CODE_HALL_CALIBRATING, HALL_CALIBRATE);
 				} else {
 					if (fsmstate->print_uart_msg){
 						printf("\r\nEntering AB/AD Hall Calibration Mode\r\n");
@@ -239,6 +243,10 @@
 				if (fsmstate->print_uart_msg){
 					printf("\r\nExiting Hall Calibration Mode\r\n");
 				}
+				// Left mid-run (ESC / FC_RESET): don't keep reporting "calibrating".
+				if (hall_cal.hall_cal_state == CODE_HALL_CALIBRATING){
+					hall_cal.hall_cal_state = CODE_HALL_UNCALIBRATED;
+				}
 				GPIO_DISABLE;
 				LED_LOW;
 				drv_disable_gd(drv);
@@ -294,13 +302,12 @@
 					break;
 				case ZERO_CMD:
 					encoder_set_zero();
+					// The zero no longer comes from a hall calibration.
+					hall_cal.hall_cal_state = CODE_HALL_UNCALIBRATED;
 					break;
 				case HALL_CAL_CMD:
 					encoder_set_zero();
-					hall_cal.hall_cal_count = 0;
 					hall_cal.hall_cal_state = CODE_HALL_CALIBRATING;
-					hall_cal.hall_present_pos = 0.0f;
-					hall_cal.hall_cal_pcmd = 0.0f;
 					fsmstate->next_state = HALL_CALIBRATE;
 					fsmstate->ready = 0;
 					break;
@@ -364,10 +371,10 @@
 	    printf("\r\n Control:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "b", "Current Bandwidth (Hz)",                    "100", "2000",   I_BW);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "l", "Current Limit (A)",                         "0.0", "75.0",   I_MAX);
-	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "p", "Max Position Setpoint (rad)",               "-",   "-",      P_MAX);
-	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "v", "Max Velocity Setpoint (rad)/s",             "-",   "-",      V_MAX);
-	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "T", "Max Torque Setpoint (rad)/s",               "-",   "-",      T_MAX);
-	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "k", "Max Gain for Position (N-m/rad)",           "0.0", "1000.0", KP_MAX);
+	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "-", "CAN Position Range Max (rad)",              "fixed", "",     P_MAX);
+	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "-", "CAN Velocity Range (+/- rad/s)",            "fixed", "",     V_MAX);
+	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "-", "CAN Torque Range (+/- N-m)",                "fixed", "",     T_MAX);
+	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "k", "Max Gain for Position (N-m/rad)",           "0.0", "500.0",  KP_MAX);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "i", "Max Integral Gain for Position (N-m*s/rad)","0.0", "10.0",   KI_MAX);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "d", "Max Gain for Velocity (N-m/rad/s)",         "0.0", "5.0",    KD_MAX);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "X", "Motor Mode Default Kp (N-m/rad)",          "0.0", "1000.0", MOTOR_MODE_KP);

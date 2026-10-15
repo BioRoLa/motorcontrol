@@ -528,39 +528,39 @@ static const char *abad_phase_name(uint8_t phase) {
  * and off again (exit), then move to the window center plus HALL_CAL_OFFSET degrees in
  * the sweep direction and zero there. Fails after a full turn without both edges.
  */
-void hall_calibrate(FSMStruct * fsmstate){
-    static uint32_t hip_log_div = 0;
-    static uint8_t hip_backing_out = 0;
-    static uint8_t hip_backout_clear = 0;
-    static float hip_backout_clear_pos = 0.0f;
-    static uint8_t hip_centering = 0;
-    static float hip_target = 0.0f;
-    static int hip_center_dir = 0;
-    static const char *hip_fail_reason = "";
-    static int hip_prev_cal_state = -1;
+static uint32_t hip_log_div = 0;
+static uint8_t hip_backing_out = 0;
+static uint8_t hip_backout_clear = 0;
+static float hip_backout_clear_pos = 0.0f;
+static uint8_t hip_centering = 0;
+static float hip_target = 0.0f;
+static int hip_center_dir = 0;
+static const char *hip_fail_reason = "";
 
+/* Called by the FSM on entering HALL_CALIBRATE (hip path), like abad_cal_reset(). */
+void hall_cal_reset(void){
+    hall_cal.hall_cal_count = 0;
+    hall_cal.hall_present_pos = 0.0f;
+    hall_cal.hall_cal_pcmd = 0.0f;
+    hip_log_div = 0;
+    hip_centering = 0;
+    hip_backout_clear = 0;
+    hip_backing_out = (HAL_GPIO_ReadPin(HALL_IO) == 0);
+    // Treat the sensor as off at the start of every run, as after boot, so the reading
+    // left over from the previous run isn't counted as an edge.
+    hall_cal.hall_preinput = 1;
+    printf("HIP Hall Cal: starting  dir=%s  speed=%.1f rad/s\r\n",
+           HALL_CAL_DIR > 0 ? "CW" : "CCW", (double)HALL_CAL_SPEED);
+    if (hip_backing_out) {
+        printf("HIP Hall Cal: started on the magnet, backing out\r\n");
+    }
+}
+
+void hall_calibrate(FSMStruct * fsmstate){
     int state_before = hall_cal.hall_cal_state;
     int dir = HALL_CAL_DIR;
     float theta = controller.theta_mech;
     float step = HALL_CAL_SPEED * DT;
-
-    /* Start of a new calibration run */
-    if (hip_prev_cal_state != CODE_HALL_CALIBRATING && state_before == CODE_HALL_CALIBRATING) {
-        hip_log_div = 0;
-        hip_centering = 0;
-        hip_backout_clear = 0;
-        hip_backing_out = (HAL_GPIO_ReadPin(HALL_IO) == 0);
-        // Treat the sensor as off at the start of every run, as after boot, so the reading
-        // left over from the previous run isn't counted as an edge.
-        hall_cal.hall_preinput = 1;
-        printf("HIP Hall Cal: starting  dir=%s  speed=%.1f rad/s\r\n",
-               dir > 0 ? "CW" : "CCW", (double)HALL_CAL_SPEED);
-        if (hip_backing_out) {
-            printf("HIP Hall Cal: started on the magnet, backing out\r\n");
-        }
-        can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
-                            controller.i_q_filt*KT*GR, CODE_HALL_CALIBRATING, fsmstate->state);
-    }
 
     if (state_before == CODE_HALL_CALIBRATING) {
         hall_cal.hall_input = HAL_GPIO_ReadPin(HALL_IO);
@@ -655,6 +655,5 @@ void hall_calibrate(FSMStruct * fsmstate){
         can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
                             controller.i_q_filt*KT*GR, state_after, fsmstate->next_state);
     }
-    hip_prev_cal_state = state_after;
 }
 

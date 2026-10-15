@@ -34,7 +34,18 @@ Both go through the same path (`HALL_CAL_CMD` in `fsm.c`):
 
 On success the encoder is zeroed at the found position and the FSM switches to
 `MOTOR_MODE`. On failure the joint holds where it is and the FSM returns to `MENU_MODE`.
-The zero lives in RAM only: a power cycle needs a new calibration.
+Aborting a run (`ESC`, CAN `FC_RESET`) sets the status back to 0 (uncalibrated).
+
+**Set zero** (`z`, CAN `FC_SET_ZERO`) makes the current position 0 without moving the
+motor, and sets the status to 0: status 2 only means the current zero came from a hall
+calibration. The host's power-up sequence sends `SET_ZERO`, so a calibration has to follow
+it.
+
+**When the zero is saved:** the zero is a register (`M_ZERO`). Calibration and set zero only
+change it in RAM, but every save to flash writes all registers, so the next config save (a
+UART setup entry, or a CAN config write that changes a value) stores the current zero too.
+After a power cycle the motor then starts from that saved zero. Recalibrate after power-up
+regardless.
 
 CAN `FC_CONTROL_CMD` frames are ignored while the FSM is in `HALL_CALIBRATE`, so a host
 streaming commands can't fight the calibration.
@@ -51,7 +62,7 @@ within `CAN_TIMEOUT` cycles as usual, or the gains are zeroed.
 
 | Code | Name | Meaning |
 |---|---|---|
-| 0 | `CODE_HALL_UNCALIBRATED` | No calibration run yet |
+| 0 | `CODE_HALL_UNCALIBRATED` | No calibration since boot, the last run was aborted, or set zero was used since |
 | 1 | `CODE_HALL_CALIBRATING` | Running |
 | 2 | `CODE_HALL_CAL_SUCCESS` | Done, encoder zeroed |
 | 3 | `CODE_HALL_CAL_FAIL` | Failed, back in the menu |
@@ -375,7 +386,8 @@ trigger, center target, final err, result code, time taken.
    toward the leg-up hard stop (~40° past the zone).
 3. **Side assignment is assumed, not detected.** If a leg's A/B sides are swapped, cal
    fails on the second reversal. Step 0 catches it.
-4. **Zero is RAM-only**; confirm a power cycle needs a re-cal.
+4. **The zero is only saved by the next config save** (see [Common](#common)). Confirm a
+   power cycle without a config save loses it, and plan to re-cal after every power-up.
 
 ### Result template
 
@@ -432,6 +444,11 @@ return read-only.
   run's entry edge (the sensor reading wasn't reset between runs); an offset smaller than
   half the window zeroed at the exit edge instead of the target; `HALL_CAL_DIR` = 0 left the
   calibration stuck instead of failing.
+- **Aborted calibration resets the status.** `ESC`/`FC_RESET` mid-run left `hall_cal_state`
+  at 1 (calibrating), so a polling host kept seeing "calibrating". It's now 0. The hip
+  routine also gets an explicit reset on entry (`hall_cal_reset()`, like
+  `abad_cal_reset()`); before, a hip re-run after an abort wasn't recognised as a new run
+  and failed.
 - **Hip starts on the magnet backs out first.** Starting inside the sensor window used to take
   the start position as the entry edge (center off by up to half the window), and re-running
   a calibration with the leg still at its zero (on the magnet) failed with "swept >360 deg".

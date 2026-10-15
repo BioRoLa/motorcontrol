@@ -59,6 +59,7 @@
  * Sweeps a single binary hall sensor to find its center, then zeros the encoder there
  */
 void hall_calibrate(FSMStruct * fsmstate);
+void hall_cal_reset(void);
 
 /*
  * abad_hall_calibrate()

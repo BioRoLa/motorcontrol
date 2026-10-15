@@ -89,7 +89,7 @@ High-level menu commands in `fsm.h`:
 - `c`: encoder calibration mode
 - `e`: encoder display mode
 - `s`: setup mode
-- `z`: set encoder zero
+- `z`: set encoder zero (the current position becomes 0; the motor doesn't move). Resets the hall calibration status to 0
 - `h`: hall calibration ([HALL_CALIBRATION.md](HALL_CALIBRATION.md))
 - `q`: hall sensor debug mode ([HALL_CALIBRATION.md](HALL_CALIBRATION.md#hall-debug-mode-q))
 - `ESC` (`27`): return to menu from active mode
@@ -114,9 +114,8 @@ Range and validation behavior:
 
 - Out-of-range values return `Not a valid value`.
 - Unknown prefixes return `Not a valid command`.
-- Some channels enforce coupled updates:
-  - setting `V_MAX` also sets `V_MIN = -V_MAX`
-  - setting `T_MAX` also sets `T_MIN = -T_MAX`
+- UART setup and CAN `FC_MANAGE_CONFIG` writes go through the same checks (`float_reg_set` / `int_reg_set` in `user_config.c`), so they accept and reject the same values.
+- `P_MIN/P_MAX`, `V_MIN/V_MAX`, `T_MIN/T_MAX` are read-only. They aren't motion limits: they're the CAN number scaling (position commands over 0..2π, velocity over ±45 rad/s, torque over ±20 N·m, both in replies and in the feed-forward torque command) and must equal the host's constants in `fpga_driver/include/can_packet.h`. They're set to those values at boot (`CAN_*` in `user_config.h`).
 
 ### Common setup prefixes
 
@@ -126,9 +125,6 @@ Most-used writable prefixes exposed in `enter_setup_state` and `user_config.h`:
 - `t`: torque constant (`KT`)
 - `b`: current bandwidth (`I_BW`)
 - `l`: current limit (`I_MAX`)
-- `p`: max position setpoint (`P_MAX`)
-- `v`: max velocity setpoint (`V_MAX`)
-- `T`: max torque setpoint (`T_MAX`)
 - `k`, `i`, `d`: max position-loop gains (`KP_MAX` ≤ 500, `KI_MAX` ≤ 10, `KD_MAX` ≤ 5, matching the host's CAN packing ranges)
 - `X`, `Y`, `Z`: default motor-mode gains (`MOTOR_MODE_KP/KI/KD`)
 - `f`: field-weakening current limit (`I_FW_MAX`)
@@ -140,7 +136,7 @@ Most-used writable prefixes exposed in `enter_setup_state` and `user_config.h`:
 - `m`: CAN master ID (`CAN_MASTER`)
 - `o`: CAN timeout (`CAN_TIMEOUT`)
 
-Note: any setup item shown in the table that has no UART command prefix in `user_config.h` is read-only over UART and must be changed via other configuration paths.
+Note: a register with no setup prefix (`CMD_* == ' '` in `user_config.h`) is read-only on both UART and CAN.
 
 If any setup-menu printout and command table ever disagree, treat the `CMD_*` mappings in `Core/Inc/user_config.h` as source of truth.
 
@@ -162,20 +158,13 @@ The table below lists all register prefixes that are writable over UART (`CMD_* 
 | `n`    | `CAN_ID`          | int   | CAN node ID                                          |
 | `m`    | `CAN_MASTER`      | int   | CAN master/controller ID                             |
 | `o`    | `CAN_TIMEOUT`     | int   | CAN timeout cycles                                   |
-| `p`    | `P_MAX`           | float | Max position setpoint                                |
 | `P`    | `MOTOR_POSITION`  | int   | Motor role (`0=HIP, 1=AB/AD`)                        |
 | `t`    | `KT`              | float | Torque constant                                      |
-| `v`    | `V_MAX`           | float | Max velocity setpoint (also sets `V_MIN=-V_MAX`)     |
-| `T`    | `T_MAX`           | float | Max torque setpoint (also sets `T_MIN=-T_MAX`)       |
 | `X`    | `MOTOR_MODE_KP`   | float | Default motor-mode proportional gain                 |
 | `Y`    | `MOTOR_MODE_KI`   | float | Default motor-mode integral gain                     |
 | `Z`    | `MOTOR_MODE_KD`   | float | Default motor-mode derivative gain                   |
 
 Hall calibration registers (`r`, `e`, `h`, `K`, `I`, `D`, `S`, `J`, `U`, `V`) are listed in [HALL_CALIBRATION.md](HALL_CALIBRATION.md#registers).
-
-Reserved/unused in UART setup parser:
-
-- Prefix `'_'` appears in internal definitions (for some min-side limits) and is not intended for normal setup usage.
 
 ### Example UART session
 
@@ -214,7 +203,7 @@ Hall calibration (`h`) picks hip or AB/AD from `MOTOR_POSITION`; see [HALL_CALIB
 CAN supports:
 
 - control command packets (position + gains + feed-forward torque); ignored during hall calibration
-- config read/write packets for int/float register map
+- config read/write packets for int/float register map (`FC_MANAGE_CONFIG`, 1): same validation as UART setup; rejected in motor mode; saved to flash when the value changes
 - status reply packets (position/velocity/torque + state/version metadata)
 - read-only state poll `FC_GET_STATE` (6): replies with FSM state and `hall_cal_state` without touching the FSM
 - hall calibration start `FC_HALL_CAL` (3): see [HALL_CALIBRATION.md](HALL_CALIBRATION.md)
@@ -259,6 +248,13 @@ For porting to another board, start here:
 ## Changelog
 
 Hall calibration changes are logged in [HALL_CALIBRATION.md](HALL_CALIBRATION.md#changelog).
+
+### 2026-10-16
+
+- **UART/CAN register-write parity.** Both paths now share one set of checks. Previously a CAN write to `V_MAX`/`T_MAX` didn't update `V_MIN`/`T_MIN`, UART accepted `HALL_CAL_DIR = 0` (CAN rejected it), and UART could write registers that have no setup prefix by typing a space.
+- **CAN scaling registers read-only.** `P/V/T_MIN` and `P/V/T_MAX` are fixed at boot to the host's packing ranges (0..2π, ±45, ±20). They used to be writable (`p`, `v`, `T` over UART, all six over CAN), and any change silently rescaled every command and reply.
+- **Feed-forward torque decoded over `T_MIN..T_MAX`**, matching the host. It used to be decoded over ±`I_MAX·KT·GR` (±19.2 N·m with the defaults) while the host packs ±20, so every feed-forward torque arrived ~4% low, more on boards with other `I_MAX`/`KT`/`GR`.
+- **Set zero resets the hall calibration status to 0**, so status 2 always means the current zero came from a hall calibration. The host's power-up sequence sends `SET_ZERO`, so a re-init after a calibration used to keep reporting "calibrated" with an arbitrary zero.
 
 ### 2026-10-05
 

@@ -118,39 +118,49 @@ extern "C" {
 #define MIN_I_CAL				0.0f								// Calibration Current
 #define MAX_I_CAL				20.0f								// Calibration Current
 
+/* CAN wire-format scaling. Position commands are packed over P_MIN..P_MAX, velocity and
+ * torque (replies and the feed-forward torque command) over V_MIN..V_MAX / T_MIN..T_MAX.
+ * They must equal the host's constants (fpga_driver include/can_packet.h: P_CMD_MIN/MAX,
+ * V_MIN/MAX, T_MIN/MAX) or every value is silently rescaled, so the registers are
+ * read-only and set to these at boot. */
+#define CAN_P_MIN				0.0f
+#define CAN_P_MAX				6.283185f
+#define CAN_V_MAX				45.0f
+#define CAN_T_MAX				20.0f
+
 #define NAME_P_MIN				"P_MIN"								// Position setpoint lower limit (rad)
 #define ADDR_P_MIN				19									// Position setpoint lower limit (rad)
-#define CMD_P_MIN				'_'									// Position setpoint lower limit (rad)
+#define CMD_P_MIN				' '									// Read-only, CAN_P_MIN at boot
 #define MIN_P_MIN				GLOBAL_MIN_VALUE								// Position setpoint lower limit (rad)
 #define MAX_P_MIN				0.0f								// Position setpoint lower limit (rad)
 
 #define NAME_P_MAX				"P_MAX"								// Position setupoint upper bound (rad)
 #define ADDR_P_MAX				20									// Position setupoint upper bound (rad)
-#define CMD_P_MAX				'p'									// Position setupoint upper bound (rad)
+#define CMD_P_MAX				' '									// Read-only, CAN_P_MAX at boot
 #define MIN_P_MAX				0.0f								// Position setupoint upper bound (rad)
 #define MAX_P_MAX				GLOBAL_MAX_VALUE					// Position setupoint upper bound (rad)
 
 #define NAME_V_MIN				"V_MIN"								// Velocity setpoint lower bound (rad/s)
 #define ADDR_V_MIN				21									// Velocity setpoint lower bound (rad/s)
-#define CMD_V_MIN				'_'									// Velocity setpoint lower bound (rad/s)
+#define CMD_V_MIN				' '									// Read-only, -CAN_V_MAX at boot
 #define MIN_V_MIN				GLOBAL_MIN_VALUE					// Velocity setpoint lower bound (rad/s)
 #define MAX_V_MIN				0.0f								// Velocity setpoint lower bound (rad/s)
 
 #define NAME_V_MAX				"V_MAX"								// Velocity setpoint upper bound (rad/s)
 #define ADDR_V_MAX				22									// Velocity setpoint upper bound (rad/s)
-#define CMD_V_MAX				'v'									// Velocity setpoint upper bound (rad/s)
+#define CMD_V_MAX				' '									// Read-only, CAN_V_MAX at boot
 #define MIN_V_MAX				0.0f								// Velocity setpoint upper bound (rad/s)
 #define MAX_V_MAX				GLOBAL_MAX_VALUE					// Velocity setpoint upper bound (rad/s)
 
 #define NAME_T_MIN     			"T_MIN"
 #define ADDR_T_MIN			    23
-#define CMD_T_MIN		     	'_'
+#define CMD_T_MIN		     	' '									// Read-only, -CAN_T_MAX at boot
 #define MIN_T_MIN		     	GLOBAL_MIN_VALUE
 #define MAX_T_MIN		     	0.0f
 
 #define NAME_T_MAX     			"T_MAX"
 #define ADDR_T_MAX			    24
-#define CMD_T_MAX		     	'T'
+#define CMD_T_MAX		     	' '									// Read-only, CAN_T_MAX at boot
 #define MIN_T_MAX		     	0.0f
 #define MAX_T_MAX		     	GLOBAL_MAX_VALUE
 
