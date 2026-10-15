@@ -185,7 +185,6 @@ int main(void)
   if(isnan(HALL_CAL_KP)     || MIN_HALL_CAL_KP > HALL_CAL_KP         || MAX_HALL_CAL_KP < HALL_CAL_KP)         {HALL_CAL_KP = 50.0f;}
   if(isnan(HALL_CAL_KI)     || MIN_HALL_CAL_KI > HALL_CAL_KI         || MAX_HALL_CAL_KI < HALL_CAL_KI)         {HALL_CAL_KI = 0.0f;}
   if(isnan(HALL_CAL_KD)     || MIN_HALL_CAL_KD > HALL_CAL_KD         || MAX_HALL_CAL_KD < HALL_CAL_KD)         {HALL_CAL_KD = 1.5f;}
-  if(ABAD_CAL_DIR != 1 && ABAD_CAL_DIR != -1)                                                                             {ABAD_CAL_DIR = 1;}
   if(isnan(ABAD_CAL_OFFSET) || MIN_ABAD_CAL_OFFSET > ABAD_CAL_OFFSET || MAX_ABAD_CAL_OFFSET < ABAD_CAL_OFFSET)          {ABAD_CAL_OFFSET = 0.0f;}
   if(isnan(ABAD_CAL_SPEED)  || MIN_ABAD_CAL_SPEED > ABAD_CAL_SPEED   || MAX_ABAD_CAL_SPEED < ABAD_CAL_SPEED)            {ABAD_CAL_SPEED = 0.25f;}
   if(isnan(ABAD_CAL_KP)     || MIN_ABAD_CAL_KP > ABAD_CAL_KP         || MAX_ABAD_CAL_KP < ABAD_CAL_KP)                  {ABAD_CAL_KP = 50.0f;}

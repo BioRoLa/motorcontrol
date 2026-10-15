@@ -256,11 +256,6 @@ void user_config_initialize(void){
 	int_reg_config[ADDR_HALL_CAL_DIR].i_MIN			= MIN_HALL_CAL_DIR;
 	int_reg_config[ADDR_HALL_CAL_DIR].i_MAX			= MAX_HALL_CAL_DIR;
 
-	int_reg_config[ADDR_ABAD_CAL_DIR].name			= NAME_ABAD_CAL_DIR;
-	int_reg_config[ADDR_ABAD_CAL_DIR].cmd			= CMD_ABAD_CAL_DIR;
-	int_reg_config[ADDR_ABAD_CAL_DIR].i_MIN			= MIN_ABAD_CAL_DIR;
-	int_reg_config[ADDR_ABAD_CAL_DIR].i_MAX			= MAX_ABAD_CAL_DIR;
-
 	int_reg_config[ADDR_ENCODER_LUT].name			= NAME_ENCODER_LUT;
 	int_reg_config[ADDR_ENCODER_LUT].cmd			= CMD_ENCODER_LUT;
 	int_reg_config[ADDR_ENCODER_LUT].i_MIN			= MIN_ENCODER_LUT;

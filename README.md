@@ -189,7 +189,6 @@ Most-used writable prefixes exposed in `enter_setup_state` and `user_config.h`:
 - `e`: hall calibration offset (`HALL_CAL_OFFSET`)
 - `h`: hall calibration speed (`HALL_CAL_SPEED`)
 - `K`, `I`, `D`: hall calibration gains (`HALL_CAL_KP/KI/KD`)
-- `R`: AB/AD calibration direction (`ABAD_CAL_DIR`)
 - `O`: AB/AD calibration offset (`ABAD_CAL_OFFSET`)
 - `S`: AB/AD calibration speed (`ABAD_CAL_SPEED`)
 - `J`, `U`, `V`: AB/AD calibration gains (`ABAD_CAL_KP/KI/KD`)
@@ -224,7 +223,6 @@ The table below lists all register prefixes that are writable over UART (`CMD_* 
 | `p`    | `P_MAX`           | float | Max position setpoint                                |
 | `P`    | `MOTOR_POSITION`  | int   | Motor role (`0=HIP, 1=ABAD_NORMAL, 2=ABAD_MIRRORED`) |
 | `r`    | `HALL_CAL_DIR`    | int   | Hall calibration direction (`-1` or `1`)             |
-| `R`    | `ABAD_CAL_DIR`    | int   | AB/AD calibration direction (`-1` or `1`)            |
 | `t`    | `KT`              | float | Torque constant                                      |
 | `v`    | `V_MAX`           | float | Max velocity setpoint (also sets `V_MIN=-V_MAX`)     |
 | `T`    | `T_MAX`           | float | Max torque setpoint (also sets `T_MIN=-T_MAX`)       |

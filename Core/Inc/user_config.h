@@ -334,11 +334,8 @@ extern "C" {
 #define MIN_HALL_CAL_DIR       	-1
 #define MAX_HALL_CAL_DIR       	1
 
-#define NAME_ABAD_CAL_DIR       "ABAD_CAL_DIR"
-#define ADDR_ABAD_CAL_DIR       7
-#define CMD_ABAD_CAL_DIR       	'R'
-#define MIN_ABAD_CAL_DIR       	-1
-#define MAX_ABAD_CAL_DIR       	1
+// int reg 7 is unused (was ABAD_CAL_DIR; AB/AD cal directions are fixed in motor angle,
+// see ABAD_A_SIDE_DIR in hall_calibration.h). Left empty so the flash layout is unchanged.
 
 #define NAME_ENCODER_LUT        "ENCODER_LUT"
 #define ADDR_ENCODER_LUT        8
@@ -365,7 +362,6 @@ extern "C" {
 #define M_ZERO					__int_reg[ADDR_M_ZERO]
 #define E_ZERO					__int_reg[ADDR_E_ZERO]
 #define HALL_CAL_DIR            __int_reg[ADDR_HALL_CAL_DIR]
-#define ABAD_CAL_DIR            __int_reg[ADDR_ABAD_CAL_DIR]
 #define ENCODER_LUT             __int_reg[ADDR_ENCODER_LUT]         // Encoder offset LUT spans int regs [8..135]
 #define MOTOR_POSITION          __int_reg[ADDR_MOTOR_POSITION]      // Motor position/role (HIP, ABAD_NORMAL, ABAD_MIRRORED)
 

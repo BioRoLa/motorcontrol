@@ -383,7 +383,6 @@
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "K", "Hall Calibration Kp (N-m/rad)",            "0.0", "1000.0", HALL_CAL_KP);
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "I", "Hall Calibration Ki (N-m*s/rad)",          "0.0", "10.0",   HALL_CAL_KI);
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "D", "Hall Calibration Kd (N-m/rad/s)",          "0.0", "5.0",    HALL_CAL_KD);
-		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "R", "AB/AD Calibration Direction",              "-1",  "1",      ABAD_CAL_DIR);
 		printf(" %-4s %-31s %-5s %-6s %.1f\n\r", "O", "AB/AD Calibration Offset",                 "0.0", "90.0",   ABAD_CAL_OFFSET);
 		printf(" %-4s %-31s %-5s %-6s %.1f\n\r", "S", "AB/AD Calibration Speed",                  "0.0", "10.0",   ABAD_CAL_SPEED);
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "J", "AB/AD Calibration Kp (N-m/rad)",          "0.0", "1000.0", ABAD_CAL_KP);
