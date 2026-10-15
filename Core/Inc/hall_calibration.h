@@ -6,9 +6,9 @@
  *
  *  Hall effect calibration routines for both joint types:
  *   - HIP:   single binary hall sensor (hall_calibrate)
- *   - AB/AD: dual binary hall sensors (A, B) reading 4 magnets (M1-M4)
- *            on rotor, position range -90 deg (A@M4) to +90 deg (B@M1)
- *            (abad_hall_calibrate)
+ *   - AB/AD: dual binary hall sensors (A, B) over 4 magnets; zero is the center
+ *            of the zone where both are active (abad_hall_calibrate)
+ *  See HALL_CALIBRATION.md.
  */
 
 #ifndef INC_HALL_CALIBRATION_H_
@@ -28,20 +28,14 @@
 /* Mechanical limits for AB/AD joint */
 #define ABAD_LIMIT_MIN_DEG     -85.0f
 #define ABAD_LIMIT_MAX_DEG      85.0f
-#define ABAD_SAFE_MIN_DEG      -80.0f
-#define ABAD_SAFE_MAX_DEG       80.0f
-#define ABAD_CAL_ALIGN_TOL_DEG   5.0f
 
 #define ABAD_LIMIT_MIN_RAD    (ABAD_LIMIT_MIN_DEG * PI_F / 180.0f)
 #define ABAD_LIMIT_MAX_RAD    (ABAD_LIMIT_MAX_DEG * PI_F / 180.0f)
-#define ABAD_SAFE_MIN_RAD     (ABAD_SAFE_MIN_DEG * PI_F / 180.0f)
-#define ABAD_SAFE_MAX_RAD     (ABAD_SAFE_MAX_DEG * PI_F / 180.0f)
-#define ABAD_CAL_ALIGN_TOL_RAD (ABAD_CAL_ALIGN_TOL_DEG * PI_F / 180.0f)
 
 /* Motor-angle side of the zone where each sensor's inner magnets lie. The hall board and
- * magnets turn with the motor, so this is the same on every AB/AD leg; MOTOR_POSITION
- * 1 (FL/RR) vs 2 (FR/RL) does not affect calibration. Measured on FL/RR legs: sensor B
- * passes inner magnets toward +angle. See docs/abad_hall_cal_setup.md. */
+ * magnets turn with the motor, so this is the same on every AB/AD leg (front and rear,
+ * left and right). Measured on FL/RR legs: sensor B passes inner magnets toward +angle.
+ * See HALL_CALIBRATION.md. */
 #define ABAD_A_SIDE_DIR   (-1)
 #define ABAD_B_SIDE_DIR   (+1)
 
@@ -69,7 +63,7 @@ void hall_calibrate(FSMStruct * fsmstate);
 /*
  * abad_hall_calibrate()
  * Main calibration routine - run every interrupt cycle during HALL_CALIBRATE state (ABAD path)
- * Detects magnet transitions from both sensors, builds position map, establishes zero
+ * Finds the both-active zone, centers on it, and zeros the encoder there
  */
 void abad_hall_calibrate(FSMStruct * fsmstate);
 
@@ -84,17 +78,5 @@ float abad_controller_to_joint_angle(float controller_angle);
 float abad_joint_to_controller_angle(float joint_angle);
 float abad_clamp_joint_angle(float joint_angle);
 uint8_t abad_joint_angle_in_limits(float joint_angle);
-
-/*
- * abad_sensor_a_active()
- * Check if sensor A is currently detecting a magnet
- */
-uint8_t abad_sensor_a_active(void);
-
-/*
- * abad_sensor_b_active()
- * Check if sensor B is currently detecting a magnet
- */
-uint8_t abad_sensor_b_active(void);
 
 #endif /* INC_HALL_CALIBRATION_H_ */

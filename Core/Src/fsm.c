@@ -82,10 +82,11 @@
 			 break;
 
 		 case HALL_CALIBRATE:
-			 /* If CAN has timed out, reset all commands */
-			 if((CAN_TIMEOUT > 0 ) && (controller.timeout > CAN_TIMEOUT)){
-				 zero_commands(&controller);
-			 }
+			 /* No CAN timeout here: calibration drives its own p_des/gains and has its
+			  * own failure bounds, and control frames (the only thing that resets the
+			  * timeout) are ignored during cal, so zeroing commands would just make the
+			  * joint go limp mid-cal. Hold the counter at 0 so MOTOR_MODE's timeout
+			  * starts counting when calibration hands over. */
 			 if (MOTOR_POSITION == MOTOR_POS_HIP) {
 				 hall_calibrate(fsmstate);
 			 } else {
@@ -93,7 +94,7 @@
 			 }
 			 torque_control(&controller);
 			 commutate(&controller, &comm_encoder);
-			 controller.timeout ++;
+			 controller.timeout = 0;
 			 break;
 		 case HALL_DEBUG_MODE:
 			 hall_debug_mode(fsmstate);
@@ -165,7 +166,6 @@
 					enter_motor_mode();
 					abad_cal_reset();
 					hall_cal.hall_cal_state = CODE_HALL_CALIBRATING;
-					abad_cal.abad_present_pos = controller.theta_mech;
 					printf("ABAD Hall Cal: starting\r\n");
 					can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
 					                    controller.i_q_filt*KT*GR, CODE_HALL_CALIBRATING, HALL_CALIBRATE);
@@ -360,7 +360,7 @@
 	    printf("\r\n Motor:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "g", "Gear Ratio",                                "0",   "-",      GR);
 	    printf(" %-4s %-31s %-5s %-6s %.5f\n\r", "t", "Torque Constant (N-m/A)",                   "0",   "-",      KT);
-		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "P", "Motor Position (0=Hip, 1=ABAD Normal (FL/RR), 2=ABAD Mirrored (FR/RL))",  "0",   "2",      MOTOR_POSITION);
+		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "P", "Motor Position (0=Hip, 1=AB/AD)",          "0",   "1",      MOTOR_POSITION);
 	    printf("\r\n Control:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "b", "Current Bandwidth (Hz)",                    "100", "2000",   I_BW);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "l", "Current Limit (A)",                         "0.0", "75.0",   I_MAX);
@@ -383,7 +383,6 @@
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "K", "Hall Calibration Kp (N-m/rad)",            "0.0", "1000.0", HALL_CAL_KP);
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "I", "Hall Calibration Ki (N-m*s/rad)",          "0.0", "10.0",   HALL_CAL_KI);
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "D", "Hall Calibration Kd (N-m/rad/s)",          "0.0", "5.0",    HALL_CAL_KD);
-		printf(" %-4s %-31s %-5s %-6s %.1f\n\r", "O", "AB/AD Calibration Offset",                 "0.0", "90.0",   ABAD_CAL_OFFSET);
 		printf(" %-4s %-31s %-5s %-6s %.1f\n\r", "S", "AB/AD Calibration Speed",                  "0.0", "10.0",   ABAD_CAL_SPEED);
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "J", "AB/AD Calibration Kp (N-m/rad)",          "0.0", "1000.0", ABAD_CAL_KP);
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "U", "AB/AD Calibration Ki (N-m*s/rad)",        "0.0", "10.0",   ABAD_CAL_KI);

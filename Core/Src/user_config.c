@@ -195,11 +195,6 @@ void user_config_initialize(void){
 	float_reg_config[ADDR_MOTOR_MODE_KD].f_MIN		= MIN_MOTOR_MODE_KD;
 	float_reg_config[ADDR_MOTOR_MODE_KD].f_MAX		= MAX_MOTOR_MODE_KD;
 
-	float_reg_config[ADDR_ABAD_CAL_OFFSET].name	= NAME_ABAD_CAL_OFFSET;
-	float_reg_config[ADDR_ABAD_CAL_OFFSET].cmd		= CMD_ABAD_CAL_OFFSET;
-	float_reg_config[ADDR_ABAD_CAL_OFFSET].f_MIN	= MIN_ABAD_CAL_OFFSET;
-	float_reg_config[ADDR_ABAD_CAL_OFFSET].f_MAX	= MAX_ABAD_CAL_OFFSET;
-
 	float_reg_config[ADDR_ABAD_CAL_SPEED].name		= NAME_ABAD_CAL_SPEED;
 	float_reg_config[ADDR_ABAD_CAL_SPEED].cmd		= CMD_ABAD_CAL_SPEED;
 	float_reg_config[ADDR_ABAD_CAL_SPEED].f_MIN		= MIN_ABAD_CAL_SPEED;

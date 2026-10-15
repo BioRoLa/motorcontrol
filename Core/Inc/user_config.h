@@ -220,11 +220,8 @@ extern "C" {
 #define MIN_MOTOR_MODE_KD        0.0f
 #define MAX_MOTOR_MODE_KD        5.0f
 
-#define NAME_ABAD_CAL_OFFSET    "ABAD_CAL_OFFSET"
-#define ADDR_ABAD_CAL_OFFSET    36
-#define CMD_ABAD_CAL_OFFSET    	'O'
-#define MIN_ABAD_CAL_OFFSET    	0.0f
-#define MAX_ABAD_CAL_OFFSET    	90.0f
+// float reg 36 is unused (was ABAD_CAL_OFFSET, which no calibration code ever read).
+// Left empty so the flash layout is unchanged.
 
 #define NAME_ABAD_CAL_SPEED     "ABAD_CAL_SPEED"
 #define ADDR_ABAD_CAL_SPEED     37
@@ -285,7 +282,6 @@ extern "C" {
 #define MOTOR_MODE_KP           __float_reg[ADDR_MOTOR_MODE_KP]
 #define MOTOR_MODE_KI           __float_reg[ADDR_MOTOR_MODE_KI]
 #define MOTOR_MODE_KD           __float_reg[ADDR_MOTOR_MODE_KD]
-#define ABAD_CAL_OFFSET         __float_reg[ADDR_ABAD_CAL_OFFSET]
 #define ABAD_CAL_SPEED          __float_reg[ADDR_ABAD_CAL_SPEED]
 #define ABAD_CAL_KP             __float_reg[ADDR_ABAD_CAL_KP]
 #define ABAD_CAL_KI             __float_reg[ADDR_ABAD_CAL_KI]
@@ -347,12 +343,12 @@ extern "C" {
 #define ADDR_MOTOR_POSITION     136
 #define CMD_MOTOR_POSITION     	'P'
 #define MIN_MOTOR_POSITION     	0
-#define MAX_MOTOR_POSITION     	2
+#define MAX_MOTOR_POSITION     	1
 
-/* Motor position/role definitions */
+/* Motor role. AB/AD used to be split into 1 = FL/RR and 2 = FR/RL; nothing depends on the
+ * leg side any more, and a stored 2 is converted to 1 at boot (main.c). */
 #define MOTOR_POS_HIP             0  // Hip flexion/extension
-#define MOTOR_POS_ABAD_NORMAL     1  // AB/AD normal orientation (Front Left & Rear Right Position)
-#define MOTOR_POS_ABAD_MIRRORED   2  // AB/AD mirrored orientation (Front Right & Rear Left Position)
+#define MOTOR_POS_ABAD            1  // AB/AD, any leg
 
 
 #define PHASE_ORDER             __int_reg[ADDR_PHASE_ORDER]         // Phase swapping during calibration
@@ -363,7 +359,7 @@ extern "C" {
 #define E_ZERO					__int_reg[ADDR_E_ZERO]
 #define HALL_CAL_DIR            __int_reg[ADDR_HALL_CAL_DIR]
 #define ENCODER_LUT             __int_reg[ADDR_ENCODER_LUT]         // Encoder offset LUT spans int regs [8..135]
-#define MOTOR_POSITION          __int_reg[ADDR_MOTOR_POSITION]      // Motor position/role (HIP, ABAD_NORMAL, ABAD_MIRRORED)
+#define MOTOR_POSITION          __int_reg[ADDR_MOTOR_POSITION]      // Motor role (MOTOR_POS_HIP, MOTOR_POS_ABAD)
 
 
 #define STR_INVALID_VALUE		"Not a valid value\r\n"

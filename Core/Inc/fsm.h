@@ -34,9 +34,7 @@ extern "C" {
 #define ZERO_CMD			'z'
 #define ENTER_CMD			13
 #define HALL_CAL_CMD		'h'
-#define ABAD_CAL_CMD		'a'
 #define HALL_DEBUG_CMD      'q'
-#define MOTOR_POS_CMD       'p'
 
 
 typedef struct{

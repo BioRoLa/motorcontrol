@@ -15,7 +15,6 @@
 #include "user_config.h"
 #include "math_ops.h"
 #include <stdio.h>
-#include <string.h>
 
 /* Forward declarations */
 static void abad_cal_find_first_sensor(FSMStruct * fsmstate);
@@ -68,14 +67,10 @@ static int abad_motion_dir = 1;
 static float abad_phase_start_joint = 0.0f;
 static uint8_t abad_last_logged_phase = 0xFF;
 static uint16_t abad_phase_log_div = 0;
-static uint8_t abad_zero_window_started = 0;
-static float abad_zero_window_entry = 0.0f;
-static float abad_zero_window_exit = 0.0f;
 static float abad_zero_target = 0.0f;
 static uint16_t abad_center_settle_count = 0;
 static uint8_t abad_prev_both_active = 0;
 static float abad_center_trigger_forward = 0.0f;
-static float abad_center_trigger_reverse = 0.0f;
 static uint8_t abad_center_stage = 0;
 static float abad_center_far_edge = 0.0f;
 static uint8_t abad_first_cycle = 1;
@@ -85,9 +80,6 @@ static float abad_watch_off_joint = 0.0f;
 static uint8_t abad_find_zero_reversed = 0;
 static uint32_t abad_center_zero_cycles = 0;
 
-#define ABAD_CENTER_KP              0.4f
-#define ABAD_CENTER_MAX_STEP_SCALE  0.35f
-#define ABAD_CENTER_MIN_STEP_SCALE  0.05f
 #define ABAD_CENTER_SETTLE_CYCLES   2000    // 50 ms held within tolerance at the target
 #define ABAD_CENTER_OVERTRAVEL_DEG  8.0f
 #define ABAD_CENTER_OVERTRAVEL_RAD  (ABAD_CENTER_OVERTRAVEL_DEG * PI_F / 180.0f)
@@ -104,12 +96,14 @@ static uint32_t abad_center_zero_cycles = 0;
 #define ABAD_CENTER_FINAL_TOL_RAD   (ABAD_CENTER_FINAL_TOL_DEG * PI_F / 180.0f)
 #define ABAD_CENTER_ZERO_TIMEOUT_CYCLES 400000U  // 10 s: slew up to half of ABAD_CENTER_ZONE_MAX_DEG plus settle
 
-uint8_t abad_sensor_a_active(void) {
-    return HAL_GPIO_ReadPin(HALL_A_IO) == 0;  // Active low (0 = magnet detected)
+/* The pins are read once per cycle into abad_cal.hall_a/b_input (abad_hall_calibrate,
+ * abad_cal_reset); everything in that cycle uses the same reading. Active low. */
+static uint8_t abad_sensor_a_active(void) {
+    return abad_cal.hall_a_input == 0;
 }
 
-uint8_t abad_sensor_b_active(void) {
-    return HAL_GPIO_ReadPin(HALL_B_IO) == 0;  // Active low (0 = magnet detected)
+static uint8_t abad_sensor_b_active(void) {
+    return abad_cal.hall_b_input == 0;
 }
 
 /*
@@ -148,8 +142,8 @@ void abad_hall_calibrate(FSMStruct * fsmstate) {
                abad_phase_name(abad_cal_phase),
                              (double)delta_from_start_deg,
                              (double)enc_frame_angle_deg,
-               (int)(abad_cal.hall_a_input == 0),
-               (int)(abad_cal.hall_b_input == 0),
+               (int)abad_sensor_a_active(),
+               (int)abad_sensor_b_active(),
                (unsigned)abad_cal.inner_transition_count);
         if (phase_changed) {
             can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
@@ -183,24 +177,20 @@ void abad_cal_reset(void){
     abad_cal.hall_b_input = HAL_GPIO_ReadPin(HALL_B_IO);
     abad_cal.hall_a_preinput = abad_cal.hall_a_input;
     abad_cal.hall_b_preinput = abad_cal.hall_b_input;
-    abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(abad_controller_to_joint_angle(controller.theta_mech));
-    abad_cal.abad_present_pos = abad_controller_to_joint_angle(controller.theta_mech);
+    float start_joint = abad_controller_to_joint_angle(controller.theta_mech);
+    abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(start_joint);
     abad_cal.inner_transition_count = 0;
 
     abad_cal_phase = ABAD_CAL_PHASE_FIND_FIRST_SENSOR;
     abad_motion_dir = ABAD_A_SIDE_DIR;
-    abad_phase_start_joint = abad_cal.abad_present_pos;
+    abad_phase_start_joint = start_joint;
     controller.p_des = abad_cal.abad_cal_pcmd;
     abad_last_logged_phase = 0xFF;
     abad_phase_log_div = 0;
-    abad_zero_window_started = 0;
-    abad_zero_window_entry = 0.0f;
-    abad_zero_window_exit = 0.0f;
     abad_zero_target = 0.0f;
     abad_center_settle_count = 0;
     abad_prev_both_active = (abad_sensor_a_active() && abad_sensor_b_active()) ? 1 : 0;
     abad_center_trigger_forward = 0.0f;
-    abad_center_trigger_reverse = 0.0f;
     abad_center_stage = ABAD_CENTER_STAGE_CROSS_ZONE;
     abad_center_far_edge = 0.0f;
     abad_first_cycle = 1;
@@ -217,7 +207,7 @@ void abad_cal_reset(void){
 /*
  * Pick the first sweep direction. Everything here is in motor angle, so the same logic
  * works on every AB/AD leg (normal and mirrored): the hall board and magnets turn with
- * the motor. Layout (see docs/abad_hall_cal_setup.md): four magnets, the sensors span the
+ * the motor. Layout (see HALL_CALIBRATION.md): four magnets, the sensors span the
  * two outer ones, so the zone (both active) is unique. Off the zone, sensor A passes the
  * inner magnets on the A side (ABAD_A_SIDE_DIR) and sensor B passes the ones on the
  * B side. Right at the zone the outer magnet windows don't line up exactly, leaving a
@@ -420,13 +410,12 @@ static void abad_cal_center_sample_reverse(FSMStruct * fsmstate) {
     } else {
         if (!abad_prev_both_active && both_active) {
             float diff = abad_controller_to_joint_angle(joint_theta - abad_center_trigger_forward);
-            abad_center_trigger_reverse = joint_theta;
             abad_zero_target = abad_controller_to_joint_angle(abad_center_trigger_forward + 0.5f * diff);
             abad_cal_phase = ABAD_CAL_PHASE_CENTER_ZERO;
             abad_center_settle_count = 0;
             abad_center_zero_cycles = 0;
             printf("AB/AD Cal: reverse both-active trigger at %.2f deg, center target %.2f deg\r\n",
-                   (double)(abad_center_trigger_reverse * 180.0f / PI_F),
+                   (double)(joint_theta * 180.0f / PI_F),
                    (double)(abad_zero_target * 180.0f / PI_F));
             return;
         }

@@ -185,7 +185,6 @@ int main(void)
   if(isnan(HALL_CAL_KP)     || MIN_HALL_CAL_KP > HALL_CAL_KP         || MAX_HALL_CAL_KP < HALL_CAL_KP)         {HALL_CAL_KP = 50.0f;}
   if(isnan(HALL_CAL_KI)     || MIN_HALL_CAL_KI > HALL_CAL_KI         || MAX_HALL_CAL_KI < HALL_CAL_KI)         {HALL_CAL_KI = 0.0f;}
   if(isnan(HALL_CAL_KD)     || MIN_HALL_CAL_KD > HALL_CAL_KD         || MAX_HALL_CAL_KD < HALL_CAL_KD)         {HALL_CAL_KD = 1.5f;}
-  if(isnan(ABAD_CAL_OFFSET) || MIN_ABAD_CAL_OFFSET > ABAD_CAL_OFFSET || MAX_ABAD_CAL_OFFSET < ABAD_CAL_OFFSET)          {ABAD_CAL_OFFSET = 0.0f;}
   if(isnan(ABAD_CAL_SPEED)  || MIN_ABAD_CAL_SPEED > ABAD_CAL_SPEED   || MAX_ABAD_CAL_SPEED < ABAD_CAL_SPEED)            {ABAD_CAL_SPEED = 0.25f;}
   if(isnan(ABAD_CAL_KP)     || MIN_ABAD_CAL_KP > ABAD_CAL_KP         || MAX_ABAD_CAL_KP < ABAD_CAL_KP)                  {ABAD_CAL_KP = 50.0f;}
   if(isnan(ABAD_CAL_KI)     || MIN_ABAD_CAL_KI > ABAD_CAL_KI         || MAX_ABAD_CAL_KI < ABAD_CAL_KI)                  {ABAD_CAL_KI = 0.0f;}
@@ -198,6 +197,7 @@ int main(void)
   if(isnan(R_NOMINAL)       || MIN_R_NOMINAL > R_NOMINAL             || MAX_R_NOMINAL < R_NOMINAL)             {R_NOMINAL = 0.0f;}
   if(isnan(TEMP_MAX)        || MIN_TEMP_MAX > TEMP_MAX               || MAX_TEMP_MAX < TEMP_MAX)               {TEMP_MAX = 125.0f;}
   if(isnan(PPAIRS)          || MIN_PPAIRS > PPAIRS                   || MAX_PPAIRS < PPAIRS)                   {PPAIRS = 21.0f;}
+  if(MOTOR_POSITION == 2)                                                                                                  {MOTOR_POSITION = MOTOR_POS_ABAD;}	// old AB/AD FR/RL value
   if(                          MIN_MOTOR_POSITION > MOTOR_POSITION   || MAX_MOTOR_POSITION < MOTOR_POSITION)   {MOTOR_POSITION = MOTOR_POS_HIP;}
 
   user_config_initialize();
@@ -228,12 +228,10 @@ int main(void)
   hall_cal.hall_input = 1;
   hall_cal.hall_preinput = 1;
   hall_cal.hall_cal_pcmd = 0;
-  hall_cal.hall_cal_speed = 0.25; // rad/s
   hall_cal.hall_present_pos = 0; // calibrate the previous position of encoder
   hall_cal.hall_in_pos = 0;  // read the position from 1 to 0 (magnet enters the area of hall sensor)
   hall_cal.hall_out_pos = 0; // read the position from 0 to 1 (magnet exits the area of hall sensor)
   hall_cal.hall_mid_pos = 0;
-  hall_cal. hall_cal_offset = 0; // rad
   hall_cal.hall_cal_count = 0;
   hall_cal.hall_cal_state = CODE_HALL_UNCALIBRATED;
 
@@ -243,8 +241,6 @@ int main(void)
   abad_cal.hall_b_input = 1;
   abad_cal.hall_b_preinput = 1;
   abad_cal.abad_cal_pcmd = 0;
-  abad_cal.abad_cal_speed = 0.25; // rad/s
-  abad_cal.abad_present_pos = 0;
   abad_cal.inner_transition_count = 0;
   hall_cal.hall_cal_state = CODE_HALL_UNCALIBRATED;
 

@@ -42,12 +42,10 @@ typedef struct{
 	int hall_input;
 	int hall_preinput;
 	float hall_cal_pcmd;
-	float hall_cal_speed; // rad/s
 	float hall_present_pos; // calibrate the previous position of encoder
 	float hall_in_pos;  // read the position from 1 to 0 (magnet enters the area of hall sensor)
 	float hall_out_pos; // read the position from 0 to 1 (magnet exits the area of hall sensor)
 	float hall_mid_pos;
-	float hall_cal_offset; // rad
 	int hall_cal_count;
 	int hall_cal_state;
 } HallCalStruct;
@@ -58,8 +56,6 @@ typedef struct{
 	int hall_b_input;
 	int hall_b_preinput;
 	float abad_cal_pcmd;
-	float abad_cal_speed; // rad/s
-	float abad_present_pos; // calibration start position
 	uint8_t inner_transition_count; // inner-magnet edges passed while seeking zero (diagnostic)
 } HallCalStructABAD;
 
