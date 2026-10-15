@@ -79,6 +79,8 @@ static float abad_center_trigger_forward = 0.0f;
 static float abad_center_trigger_reverse = 0.0f;
 static uint8_t abad_center_stage = 0;
 static float abad_center_far_edge = 0.0f;
+static uint8_t abad_top_lost = 0;
+static float abad_top_lost_joint = 0.0f;
 static uint32_t abad_center_zero_cycles = 0;
 
 #define ABAD_CENTER_KP              0.4f
@@ -89,6 +91,8 @@ static uint32_t abad_center_zero_cycles = 0;
 #define ABAD_CENTER_OVERTRAVEL_RAD  (ABAD_CENTER_OVERTRAVEL_DEG * PI_F / 180.0f)
 #define ABAD_CENTER_ZONE_MAX_DEG    60.0f
 #define ABAD_CENTER_ZONE_MAX_RAD    (ABAD_CENTER_ZONE_MAX_DEG * PI_F / 180.0f)
+#define ABAD_TOP_LOST_DEBOUNCE_DEG  2.0f
+#define ABAD_TOP_LOST_DEBOUNCE_RAD  (ABAD_TOP_LOST_DEBOUNCE_DEG * PI_F / 180.0f)
 
 // CENTER_SAMPLE_REVERSE stages
 #define ABAD_CENTER_STAGE_CROSS_ZONE   0   // moving through the zone toward its far edge
@@ -198,6 +202,8 @@ void abad_cal_reset(void){
     abad_center_trigger_reverse = 0.0f;
     abad_center_stage = ABAD_CENTER_STAGE_CROSS_ZONE;
     abad_center_far_edge = 0.0f;
+    abad_top_lost = 0;
+    abad_top_lost_joint = 0.0f;
     abad_center_zero_cycles = 0;
     // FIND_FIRST_SENSOR inspects the live sensor state on its first cycle and picks the
     // correct direction (or backs out of the both-active zone), so no start-position
@@ -251,6 +257,7 @@ static void abad_cal_find_first_sensor(FSMStruct * fsmstate) {
         abad_cal.bottom_transition_count = 0;
         abad_phase_start_joint = joint_theta;
         abad_prev_both_active = 0;
+        abad_top_lost = 0;
         printf("AB/AD Cal: detected %s (top) sensor, reversing downward toward zero\r\n",
                abad_bottom_sensor == 0 ? "B" : "A");
         return;
@@ -329,6 +336,25 @@ static void abad_cal_find_zero(FSMStruct * fsmstate) {
         return;
     }
     abad_prev_both_active = both_active;
+
+    // Downward sweep (case C) assumed we started above the zone because only the top
+    // sensor was active. The top sensor's region also extends a few degrees below the
+    // zone, so if it drops out without the zone ever appearing we were actually below
+    // it: reverse and sweep up. Debounced by travel so edge chatter can't flip us.
+    if (abad_motion_dir != abad_calibration_direction()) {
+        uint8_t top_active = (abad_bottom_sensor == 0) ? hall_b_active : hall_a_active;
+        if (top_active) {
+            abad_top_lost = 0;
+        } else if (!abad_top_lost) {
+            abad_top_lost = 1;
+            abad_top_lost_joint = joint_theta;
+        } else if (fabsf(abad_controller_to_joint_angle(joint_theta - abad_top_lost_joint)) >= ABAD_TOP_LOST_DEBOUNCE_RAD) {
+            abad_motion_dir = abad_calibration_direction();
+            abad_phase_start_joint = joint_theta;
+            abad_top_lost = 0;
+            printf("AB/AD Cal: top sensor lost without reaching zone, started below it - reversing upward\r\n");
+        }
+    }
 
     float joint_pcmd = abad_controller_to_joint_angle(abad_cal.abad_cal_pcmd);
     joint_pcmd += abad_motion_dir * DT * ABAD_CAL_SPEED;
