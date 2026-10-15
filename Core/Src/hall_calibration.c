@@ -77,15 +77,23 @@ static uint16_t abad_center_settle_count = 0;
 static uint8_t abad_prev_both_active = 0;
 static float abad_center_trigger_forward = 0.0f;
 static float abad_center_trigger_reverse = 0.0f;
-static uint8_t abad_center_reverse_armed = 0;
+static uint8_t abad_center_stage = 0;
+static float abad_center_far_edge = 0.0f;
 static uint32_t abad_center_zero_cycles = 0;
 
 #define ABAD_CENTER_KP              0.4f
 #define ABAD_CENTER_MAX_STEP_SCALE  0.35f
 #define ABAD_CENTER_MIN_STEP_SCALE  0.05f
 #define ABAD_CENTER_SETTLE_CYCLES   40
-#define ABAD_CENTER_OVERTRAVEL_DEG  15.0f
+#define ABAD_CENTER_OVERTRAVEL_DEG  8.0f
 #define ABAD_CENTER_OVERTRAVEL_RAD  (ABAD_CENTER_OVERTRAVEL_DEG * PI_F / 180.0f)
+#define ABAD_CENTER_ZONE_MAX_DEG    60.0f
+#define ABAD_CENTER_ZONE_MAX_RAD    (ABAD_CENTER_ZONE_MAX_DEG * PI_F / 180.0f)
+
+// CENTER_SAMPLE_REVERSE stages
+#define ABAD_CENTER_STAGE_CROSS_ZONE   0   // moving through the zone toward its far edge
+#define ABAD_CENTER_STAGE_OVERTRAVEL   1   // past the far edge, overtraveling before reverse
+#define ABAD_CENTER_STAGE_REVERSE      2   // reversed, waiting to re-enter the zone
 #define ABAD_CENTER_FINAL_TOL_DEG   1.0f
 #define ABAD_CENTER_FINAL_TOL_RAD   (ABAD_CENTER_FINAL_TOL_DEG * PI_F / 180.0f)
 #define ABAD_CENTER_ZERO_TIMEOUT_CYCLES 40000U
@@ -188,7 +196,8 @@ void abad_cal_reset(void){
     abad_prev_both_active = (abad_sensor_a_active() && abad_sensor_b_active()) ? 1 : 0;
     abad_center_trigger_forward = 0.0f;
     abad_center_trigger_reverse = 0.0f;
-    abad_center_reverse_armed = 0;
+    abad_center_stage = ABAD_CENTER_STAGE_CROSS_ZONE;
+    abad_center_far_edge = 0.0f;
     abad_center_zero_cycles = 0;
     // FIND_FIRST_SENSOR inspects the live sensor state on its first cycle and picks the
     // correct direction (or backs out of the both-active zone), so no start-position
@@ -312,12 +321,11 @@ static void abad_cal_find_zero(FSMStruct * fsmstate) {
 
     if (!abad_prev_both_active && both_active) {
         abad_center_trigger_forward = joint_theta;
-         abad_prev_both_active = both_active;
-         abad_center_reverse_armed = 0;
+        abad_prev_both_active = both_active;
+        abad_center_stage = ABAD_CENTER_STAGE_CROSS_ZONE;
         abad_cal_phase = ABAD_CAL_PHASE_CENTER_SAMPLE_REVERSE;
-         printf("AB/AD Cal: forward both-active trigger at %.2f deg, overtraveling %.2f deg before reverse\r\n",
-             (double)(abad_center_trigger_forward * 180.0f / PI_F),
-             (double)ABAD_CENTER_OVERTRAVEL_DEG);
+        printf("AB/AD Cal: forward both-active trigger at %.2f deg, crossing zone to far edge\r\n",
+               (double)(abad_center_trigger_forward * 180.0f / PI_F));
         return;
     }
     abad_prev_both_active = both_active;
@@ -336,18 +344,39 @@ static void abad_cal_find_zero(FSMStruct * fsmstate) {
     controller.p_des = abad_cal.abad_cal_pcmd;
 }
 
+/*
+ * Second centering sample. The zone can be wider than any fixed overtravel, so:
+ *   1. CROSS_ZONE: keep moving forward until both-active drops (far edge of the zone).
+ *   2. OVERTRAVEL: continue past the far edge by ABAD_CENTER_OVERTRAVEL_DEG so the
+ *      reverse pass approaches from outside the zone (clears sensor hysteresis).
+ *   3. REVERSE:    reverse and capture the both-active rising edge from that side.
+ * Both triggers are zone entries, so sensor lag biases them symmetrically and the
+ * midpoint is unbiased.
+ */
 static void abad_cal_center_sample_reverse(FSMStruct * fsmstate) {
     float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
     uint8_t both_active = abad_sensor_a_active() && abad_sensor_b_active();
 
-    if (!abad_center_reverse_armed) {
-        float forward_travel = fabsf(abad_controller_to_joint_angle(joint_theta - abad_center_trigger_forward));
-        if (forward_travel >= ABAD_CENTER_OVERTRAVEL_RAD) {
+    if (abad_center_stage == ABAD_CENTER_STAGE_CROSS_ZONE) {
+        if (!both_active) {
+            abad_center_far_edge = joint_theta;
+            abad_center_stage = ABAD_CENTER_STAGE_OVERTRAVEL;
+            printf("AB/AD Cal: far zone edge at %.2f deg (zone ~%.2f deg wide), overtraveling %.2f deg\r\n",
+                   (double)(abad_center_far_edge * 180.0f / PI_F),
+                   (double)(fabsf(abad_controller_to_joint_angle(joint_theta - abad_center_trigger_forward)) * 180.0f / PI_F),
+                   (double)ABAD_CENTER_OVERTRAVEL_DEG);
+        } else if (fabsf(abad_controller_to_joint_angle(joint_theta - abad_center_trigger_forward)) > ABAD_CENTER_ZONE_MAX_RAD) {
+            abad_cal_fail(fsmstate, "AB/AD calibration failed - far zone edge not found within expected width");
+            return;
+        }
+    } else if (abad_center_stage == ABAD_CENTER_STAGE_OVERTRAVEL) {
+        if (both_active) {
+            // Edge chatter: still at the far edge, keep crossing.
+            abad_center_stage = ABAD_CENTER_STAGE_CROSS_ZONE;
+        } else if (fabsf(abad_controller_to_joint_angle(joint_theta - abad_center_far_edge)) >= ABAD_CENTER_OVERTRAVEL_RAD) {
             abad_motion_dir = -abad_motion_dir;
-            abad_center_reverse_armed = 1;
-            abad_prev_both_active = both_active;
-            printf("AB/AD Cal: overtravel complete (%.2f deg), reversing for second trigger\r\n",
-                   (double)(forward_travel * 180.0f / PI_F));
+            abad_center_stage = ABAD_CENTER_STAGE_REVERSE;
+            printf("AB/AD Cal: overtravel complete, reversing for second trigger\r\n");
         }
     } else {
         if (!abad_prev_both_active && both_active) {
@@ -356,10 +385,15 @@ static void abad_cal_center_sample_reverse(FSMStruct * fsmstate) {
             abad_zero_target = abad_controller_to_joint_angle(abad_center_trigger_forward + 0.5f * diff);
             abad_cal_phase = ABAD_CAL_PHASE_CENTER_ZERO;
             abad_center_settle_count = 0;
-                 abad_center_zero_cycles = 0;
+            abad_center_zero_cycles = 0;
             printf("AB/AD Cal: reverse both-active trigger at %.2f deg, center target %.2f deg\r\n",
                    (double)(abad_center_trigger_reverse * 180.0f / PI_F),
                    (double)(abad_zero_target * 180.0f / PI_F));
+            return;
+        }
+        // The rising edge should come back within the overtravel distance; allow generous slack.
+        if (fabsf(abad_controller_to_joint_angle(joint_theta - abad_center_far_edge)) > ABAD_PROBE_TRAVEL_RAD) {
+            abad_cal_fail(fsmstate, "AB/AD calibration failed - reverse trigger not found within expected travel");
             return;
         }
     }
@@ -367,14 +401,12 @@ static void abad_cal_center_sample_reverse(FSMStruct * fsmstate) {
 
     float joint_pcmd = abad_controller_to_joint_angle(abad_cal.abad_cal_pcmd);
     joint_pcmd += abad_motion_dir * DT * ABAD_CAL_SPEED;
-    joint_pcmd = abad_clamp_joint_angle(joint_pcmd);
+    if (joint_pcmd > ABAD_LIMIT_MAX_RAD || joint_pcmd < ABAD_LIMIT_MIN_RAD) {
+        abad_cal_fail(fsmstate, "AB/AD calibration failed - reached mechanical limit while centering");
+        return;
+    }
     abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_pcmd);
     controller.p_des = abad_cal.abad_cal_pcmd;
-
-    // If we lose the expected trigger while reversing for too long, fail safely.
-    if (fabsf(abad_controller_to_joint_angle(joint_theta - abad_center_trigger_forward)) > ABAD_PROBE_TRAVEL_RAD) {
-        abad_cal_fail(fsmstate, "AB/AD calibration failed - reverse trigger not found within expected travel");
-    }
 }
 
 static void abad_cal_center_zero(FSMStruct * fsmstate) {

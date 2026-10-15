@@ -45,11 +45,10 @@ Record for each run: start position, phases printed, `forward/reverse trigger`,
    failure. With a dead sensor or wrong `MOTOR_POSITION` the leg can reach the
    real hard stop first and push into it at `ABAD_CAL_KP` until the soft limit
    trips. Since `c25430f`, no bottom-sensor check stops it sooner.
-2. **No timeout in CENTER_REV overtravel.** If the forward zone trigger happens
-   within 15° of the +85° soft limit, the 15° overtravel can never complete
-   (p_des is clamped) and the motor sits in HALL_CALIBRATE indefinitely. It is
-   unlikely (needs a start ~70°+ from the zone) but worth one deliberate try
-   during case 6. The host's cal step then never sees state 2.
+2. **CENTER_REV crosses the whole zone before reversing.** It runs to the far
+   edge (both-active drops), overtravels 8°, then reverses. Fails if the zone is
+   wider than 60° or the ±85° soft limit is hit first. Record the printed zone
+   width on every run; it should be repeatable to within a degree or two.
 3. **Zero is RAM-only.** `encoder_set_zero()` does not flush to flash; a power
    cycle needs a re-cal. That is expected, so just confirm it is.
 

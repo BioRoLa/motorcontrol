@@ -130,9 +130,10 @@ Control sequence:
 5. `FIND_ZERO`:
    - continue moving toward the zone (up or down, as chosen above) until the first `A && B` trigger (forward trigger sample)
 6. `CENTER_SAMPLE_REVERSE`:
-   - overtravel a few degrees
+   - keep moving through the zone until `A && B` drops (far edge; fail if the zone is wider than `ABAD_CENTER_ZONE_MAX_DEG`)
+   - overtravel `ABAD_CENTER_OVERTRAVEL_DEG` past the far edge
    - reverse direction
-   - capture second `A && B` trigger (reverse trigger sample)
+   - capture the `A && B` rising edge from the far side (reverse trigger sample)
 7. `CENTER_ZERO`:
    - compute midpoint between forward/reverse trigger samples
    - command target to that midpoint and settle
