@@ -38,8 +38,9 @@ Aborting a run (`ESC`, CAN `FC_RESET`) sets the status back to 0 (uncalibrated).
 
 **Set zero** (`z`, CAN `FC_SET_ZERO`) makes the current position 0 without moving the
 motor, and sets the status to 0: status 2 only means the current zero came from a hall
-calibration. The host's power-up sequence sends `SET_ZERO`, so a calibration has to follow
-it.
+calibration. Starting a calibration zeroes the encoder itself, so no set zero is needed
+first. (fpga_driver `main` still sends `SET_ZERO` before `HALL_CALIBRATE` at power-up, left
+over from before calibration zeroed itself; `fix/hall_calibration` removed it in `c157a1b`.)
 
 **When the zero is saved:** the zero is a register (`M_ZERO`). Calibration and set zero only
 change it in RAM, but every save to flash writes all registers, so the next config save (a

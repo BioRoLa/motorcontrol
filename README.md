@@ -254,7 +254,7 @@ Hall calibration changes are logged in [HALL_CALIBRATION.md](HALL_CALIBRATION.md
 - **UART/CAN register-write parity.** Both paths now share one set of checks. Previously a CAN write to `V_MAX`/`T_MAX` didn't update `V_MIN`/`T_MIN`, UART accepted `HALL_CAL_DIR = 0` (CAN rejected it), and UART could write registers that have no setup prefix by typing a space.
 - **CAN scaling registers read-only.** `P/V/T_MIN` and `P/V/T_MAX` are fixed at boot to the host's packing ranges (0..2π, ±45, ±20). They used to be writable (`p`, `v`, `T` over UART, all six over CAN), and any change silently rescaled every command and reply.
 - **Feed-forward torque decoded over `T_MIN..T_MAX`**, matching the host. It used to be decoded over ±`I_MAX·KT·GR` (±19.2 N·m with the defaults) while the host packs ±20, so every feed-forward torque arrived ~4% low, more on boards with other `I_MAX`/`KT`/`GR`.
-- **Set zero resets the hall calibration status to 0**, so status 2 always means the current zero came from a hall calibration. The host's power-up sequence sends `SET_ZERO`, so a re-init after a calibration used to keep reporting "calibrated" with an arbitrary zero.
+- **Set zero resets the hall calibration status to 0**, so status 2 always means the current zero came from a hall calibration. A set zero after a calibration used to keep reporting "calibrated" with an arbitrary zero.
 
 ### 2026-10-05
 
