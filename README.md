@@ -113,35 +113,19 @@ Key idea: the hip routine finds the center of one hall detection window and uses
 
 ## AB/AD dual-hall calibration (`HALL_CALIBRATE`, ABAD path)
 
-Implemented in `hall_calibration.c` (`abad_hall_calibrate`) using two binary hall sensors (`HALL_A_IO`, `HALL_B_IO`).
+Implemented in `hall_calibration.c` (`abad_hall_calibrate`) using two binary hall sensors (`HALL_A_IO`, `HALL_B_IO`) and four magnets. Full description of the layout, sensor states, phases, log lines and constants: [docs/abad_hall_cal_setup.md](docs/abad_hall_cal_setup.md). Bench procedure: [docs/abad_hall_cal_test.md](docs/abad_hall_cal_test.md).
 
 Control sequence:
 
-1. Enter Hall Calibration (`h`) from menu.
-2. FSM routes to `HALL_CALIBRATE` for both paths; `MOTOR_POSITION` selects HIP or ABAD internally.
-3. AB/AD calibration validates motor role (must not be HIP).
-4. `FIND_FIRST_SENSOR`:
-   - move upward in the configured AB/AD direction until a hall sensor is detected within `ABAD_PROBE_TRAVEL_DEG`
-   - branch on which sensor(s) are active at detection:
-     - **both active**: enter `BACKOUT` (move downward until the both-active zone clears), then resume the upward sweep so centering sees a clean lower edge
-     - **bottom sensor only**: continue upward into the zone
-     - **top sensor only**: reverse and move downward into the zone
-   - fail if no sensor is seen within `ABAD_PROBE_TRAVEL_DEG`
-5. `FIND_ZERO`:
-   - continue moving toward the zone (up or down, as chosen above) until the first `A && B` trigger (forward trigger sample)
-6. `CENTER_SAMPLE_REVERSE`:
-   - keep moving through the zone until `A && B` drops (far edge; fail if the zone is wider than `ABAD_CENTER_ZONE_MAX_DEG`)
-   - overtravel `ABAD_CENTER_OVERTRAVEL_DEG` past the far edge
-   - reverse direction
-   - capture the `A && B` rising edge from the far side (reverse trigger sample)
-7. `CENTER_ZERO`:
-   - compute midpoint between forward/reverse trigger samples
-   - command target to that midpoint and settle
-8. On success:
-   - call `abad_encoder_set_zero`
-   - transition to `MOTOR_MODE`
+1. Enter Hall Calibration (`h`) from menu, or CAN `FC_HALL_CAL`. Both zero the encoder first; `MOTOR_POSITION` != 0 selects the AB/AD path.
+2. `FIND_FIRST_SENSOR`: pick a direction from the sensors active at start. Both active: `BACKOUT` toward the B side, then sweep toward the A side. A only: toward the A side. B only: toward the B side. Neither: probe toward the A side (≤ `ABAD_PROBE_TRAVEL_DEG`).
+3. `FIND_ZERO`: sweep until `A && B` (forward trigger). Moving toward a side, if that side's sensor pulses on and off before the zone, reverse once (each sensor only sees inner magnets on its own side).
+4. `CENTER_SAMPLE_REVERSE`: cross the zone to its far edge, overtravel `ABAD_CENTER_OVERTRAVEL_DEG`, reverse, and catch `A && B` again from the far side (reverse trigger).
+5. `CENTER_ZERO`: drive to the midpoint of the two triggers, settle, `encoder_set_zero()`, then `MOTOR_MODE`.
 
-Key idea: AB/AD zero is centered from two-direction trigger samples of the same overlap window.
+Directions are in motor angle (`ABAD_A_SIDE_DIR` / `ABAD_B_SIDE_DIR`). The hall board and magnets turn with the motor, so the same logic runs on every AB/AD leg; `MOTOR_POSITION` 1 vs 2 does not change calibration.
+
+Key idea: AB/AD zero is the midpoint of two entries into the same both-active zone, one from each side.
 
 ## Interfaces
 
@@ -336,7 +320,7 @@ Motor role selection is runtime-configurable:
 - `MOTOR_POS_ABAD_NORMAL`
 - `MOTOR_POS_ABAD_MIRRORED`
 
-This allows orientation-dependent direction handling without forking firmware per leg.
+`MOTOR_POSITION` 0 selects the hip routine; 1 and 2 both select the AB/AD routine, which behaves identically for both (see [docs/abad_hall_cal_setup.md](docs/abad_hall_cal_setup.md)). The 1/2 distinction is kept for reference by the host.
 
 ### AB/AD limits and command handling
 
@@ -347,8 +331,7 @@ This allows orientation-dependent direction handling without forking firmware pe
 Startup probe and reset behavior:
 
 - On entering `HALL_CALIBRATE` (ABAD path), the firmware calls `abad_cal_reset()` to re-sample the encoder from the live position, clear any previous transition history, initialize the internal command/estimate state, and set the phase to `FIND_FIRST_SENSOR` so calibration starts cleanly.
-- **Direction selection**: the initial "upward" direction and the expected bottom sensor are derived from `MOTOR_POSITION` (`abad_calibration_direction()` / `abad_bottom_sensor_id()`). The firmware then moves upward until a hall sensor is detected within `ABAD_PROBE_TRAVEL_DEG` and resolves which way to approach the both-active zone from the sensor state at that point (see `FIND_FIRST_SENSOR` above): continue up (bottom sensor), reverse down (top sensor), or back out first (both active). If no sensor is seen within `ABAD_PROBE_TRAVEL_DEG`, calibration aborts with an explicit failure message.
-- Because the approach direction is chosen from the actual sensor state rather than an assumed starting position, calibration recovers whether the joint begins below, inside, or above the both-active zone.
+- **Direction selection**: chosen from the live sensor state in motor angle, independent of `MOTOR_POSITION`, with at most one wrong-side reversal (see the AB/AD calibration section above). Calibration recovers whether the joint begins on either side of, or inside, the both-active zone.
 
 ### Hall debug mode
 
@@ -371,7 +354,7 @@ Startup probe and reset behavior:
    - Active value for that sensor should toggle `0 -> 1` at the same moment.
    - UART should print an edge line for each transition.
 4. Sweep through the full mechanical range slowly and confirm repeated transitions:
-   - AB/AD axis should show A/B edges near expected magnet locations.
+   - AB/AD axis should show A/B edges near expected magnet locations: A pulsing on the −angle side of the zone only, B on the +angle side only (see [docs/abad_hall_cal_setup.md](docs/abad_hall_cal_setup.md#measuring-with-q-hall-sensor-debug)).
    - If no edges appear in sweep, calibration will fail in probe phase.
 5. Press `ESC` to return to menu and then run calibration with `h` once transitions are confirmed (the AB/AD path is auto-selected from `MOTOR_POSITION`).
 
