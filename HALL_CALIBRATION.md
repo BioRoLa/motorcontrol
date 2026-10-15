@@ -71,26 +71,36 @@ All hall inputs are active low: `active = (pin == 0)`.
 
 One sensor and one magnet. Finds the center of the sensor's detection window.
 
+0. If the sensor is already on at start (joint on the magnet), back out against
+   `HALL_CAL_DIR` until the sensor has been off for 3° (`HIP_BACKOUT_MARGIN_DEG`), so the
+   window is then approached from outside.
 1. Sweep in `HALL_CAL_DIR` (±1) at `HALL_CAL_SPEED`.
 2. Record where the sensor turns on (magnet enters) and where it turns off (magnet leaves).
    The midpoint is the center.
-3. With `HALL_CAL_OFFSET` = 0: drive back to the center. Otherwise keep going past the
-   center by `HALL_CAL_OFFSET` degrees in the sweep direction.
+3. The target is the center plus `HALL_CAL_OFFSET` degrees in the sweep direction. Drive
+   to it from whichever side the joint is on (back toward the center with no offset,
+   onward with a large one).
 4. Zero the encoder there.
 
-Fails if the joint has swept a full turn (360° output) without finding both edges.
+Fails if the joint sweeps a full turn (360° output) without finding both edges, backs out
+a full turn without leaving the window (sensor stuck on), or if `HALL_CAL_DIR` isn't 1 or
+−1 (the UART setup accepts 0).
 
 Log lines:
 
 | Message | Meaning |
 |---|---|
 | `HIP Hall Cal: starting  dir=CW  speed=0.2 rad/s` | Start. `CW` means `HALL_CAL_DIR` = +1, `CCW` means −1; the physical direction isn't checked |
+| `HIP Hall Cal: started on the magnet, backing out` | Sensor on at start (step 0) |
+| `HIP Hall Cal: clear of the magnet at X deg, sweeping` | Back-out done |
 | `HIP Hall Cal: sweeping  pos=X deg` | Every 0.5 s while searching |
 | `HIP Hall Cal: sensor enter  pos=X deg` | Magnet entered the sensor window |
 | `HIP Hall Cal: sensor exit  pos=X deg  center=C deg` | Magnet left; center computed |
-| `HIP Hall Cal: centering to C deg` | Moving to the target |
+| `HIP Hall Cal: centering to T deg` | Moving to the target (center + offset) |
 | `HIP Hall Cal: SUCCESS  center=C deg (now zero)` | Done, encoder zeroed |
 | `HIP Hall Cal: FAIL  swept >360 deg without finding sensor` | No sensor window found in a full turn |
+| `HIP Hall Cal: FAIL  backed out >360 deg without leaving the sensor window` | Sensor stuck on |
+| `HIP Hall Cal: FAIL  HALL_CAL_DIR must be 1 or -1` | `HALL_CAL_DIR` is 0 |
 
 ## AB/AD calibration
 
@@ -417,6 +427,14 @@ return read-only.
   frames arrived (UART-started cal, or a host that only polls), since control frames are
   ignored during cal. It now restarts when calibration ends.
 - Status line field `BottomTransitions` renamed `InnerTransitions`.
+- **Hip routine simplified and fixed.** The four direction/offset branches are now one.
+  Fixes: a second calibration without a reboot could compute the center from the previous
+  run's entry edge (the sensor reading wasn't reset between runs); an offset smaller than
+  half the window zeroed at the exit edge instead of the target; `HALL_CAL_DIR` = 0 left the
+  calibration stuck instead of failing.
+- **Hip starts on the magnet backs out first.** Starting inside the sensor window used to take
+  the start position as the entry edge (center off by up to half the window), and re-running
+  a calibration with the leg still at its zero (on the magnet) failed with "swept >360 deg".
 
 ### 2026-07-16
 
