@@ -53,6 +53,14 @@
 #define ABAD_PROBE_TRAVEL_DEG    30.0f
 #define ABAD_PROBE_TRAVEL_RAD    (ABAD_PROBE_TRAVEL_DEG * PI_F / 180.0f)
 
+/* Blocked-joint check (hip and AB/AD): if the joint lags the calibration command by more
+ * than HALL_CAL_BLOCKED_DEG for HALL_CAL_BLOCKED_CYCLES in a row, it's pushing against the
+ * stand, a hard stop or something else, so calibration fails and the motor is turned off.
+ * Normal tracking lag on the bench is ~1 deg; the SUCCESS line prints the run's max lag. */
+#define HALL_CAL_BLOCKED_DEG     8.0f
+#define HALL_CAL_BLOCKED_RAD     (HALL_CAL_BLOCKED_DEG * PI_F / 180.0f)
+#define HALL_CAL_BLOCKED_CYCLES  4000U   // 0.1 s at 40 kHz
+
 /*
  * hall_calibrate()
  * HIP calibration routine - run every interrupt cycle during HALL_CALIBRATE state (HIP path)

@@ -33,7 +33,16 @@ Both go through the same path (`HALL_CAL_CMD` in `fsm.c`):
 3. Run the selected routine every control cycle (40 kHz).
 
 On success the encoder is zeroed at the found position and the FSM switches to
-`MOTOR_MODE`. On failure the joint holds where it is and the FSM returns to `MENU_MODE`.
+`MOTOR_MODE`. On failure the FSM returns to `MENU_MODE`, which turns the motor off: the
+leg goes limp.
+
+**Blocked-joint check (both routines):** the calibration moves the joint by stepping a
+position command. If the joint lags that command by more than `HALL_CAL_BLOCKED_DEG` (8°)
+for `HALL_CAL_BLOCKED_CYCLES` (0.1 s), something is in the way (the robot stand, a hard
+stop, a hand), so the calibration fails with "joint blocked" instead of pushing harder.
+Normal tracking lag on the bench is about 1°; every SUCCESS line prints the run's max lag,
+so the margin can be checked on the robot. The 8° threshold assumes the default cal gains
+(Kp 50): at 8° that's about 7 N·m of push before it stops.
 Aborting a run (`ESC`, CAN `FC_RESET`) sets the status back to 0 (uncalibrated).
 
 **Set zero** (`z`, CAN `FC_SET_ZERO`) makes the current position 0 without moving the
@@ -109,10 +118,11 @@ Log lines:
 | `HIP Hall Cal: sensor enter  pos=X deg` | Magnet entered the sensor window |
 | `HIP Hall Cal: sensor exit  pos=X deg  center=C deg` | Magnet left; center computed |
 | `HIP Hall Cal: centering to T deg` | Moving to the target (center + offset) |
-| `HIP Hall Cal: SUCCESS  center=C deg (now zero)` | Done, encoder zeroed |
+| `HIP Hall Cal: SUCCESS  center=C deg (now zero), max lag L deg` | Done, encoder zeroed; L is the worst tracking lag of the run |
 | `HIP Hall Cal: FAIL  swept >360 deg without finding sensor` | No sensor window found in a full turn |
 | `HIP Hall Cal: FAIL  backed out >360 deg without leaving the sensor window` | Sensor stuck on |
 | `HIP Hall Cal: FAIL  HALL_CAL_DIR must be 1 or -1` | `HALL_CAL_DIR` is 0 |
+| `HIP Hall Cal: FAIL  joint blocked (lagging the command by > 8 deg); stopped` | Pushing against something |
 
 ## AB/AD calibration
 
@@ -153,10 +163,14 @@ on the motor housing and the magnets are on the output, so the whole layout turn
 the motor: in motor angle the A/B pattern is the same on every leg. What differs is which
 motor direction lifts the leg. The sensors can't tell, so it comes from `MOTOR_POSITION`:
 
-| Leg | `MOTOR_POSITION` | Leg up | Sensor that pulses below the zone | Upper sensor on the board |
+| Leg | `MOTOR_POSITION` | Leg up | Above-zone sensor | Below-zone sensor (the upper one on the board) |
 |---|---|---|---|---|
-| FL, RR | 1 | −angle (A side) | B | B |
-| FR, RL | 2 | +angle (B side) | A | A |
+| FL, RR | 1 | −angle (A side) | A | B |
+| FR, RL | 2 | +angle (B side) | B | A |
+
+The **above-zone sensor** pulses on inner magnets when the leg is above the zone, the
+**below-zone sensor** when it's below. Each one is also on by itself in a thin sliver at the
+opposite edge of the zone (above-zone sensor just below the zone, and vice versa).
 
 Checked on RR: raising the leg makes `ENC` go down. The board labels were checked on all
 four legs. The calibration only uses "up" to choose its first move; finding and centering
@@ -235,14 +249,14 @@ it there, and wait until the joint has been within 1° of it, with both sensors 
 |---|---|---|
 | Below the zone (any sensors) | up → zone → cross → 8° over the top → back down to the top edge → center | The start: never below it |
 | In the zone | up until clear → down → zone → cross → 8° below the bottom edge → back up → center | 8° below the zone's bottom edge |
-| Just above the zone (down-side sensor alone) | up → upper sensor pulses on an inner magnet → reverse down → zone | 8° below the zone's bottom edge |
-| Above the zone (upper sensor on an inner magnet, or nothing) | up → upper sensor drops → reverse down → zone | 8° below the zone's bottom edge |
+| Just above the zone (below-zone sensor alone, sliver) | up → above-zone sensor pulses on an inner magnet → reverse down → zone | 8° below the zone's bottom edge |
+| Above the zone (above-zone sensor on an inner magnet, or nothing) | up → above-zone sensor drops → reverse down → zone | 8° below the zone's bottom edge |
 
 So downward travel only starts once the zone is known to be below, and never goes lower
 than 8° under the zone (the leg's neutral range).
 
 **Don't start with the leg raised above center.** A start above the zone keeps moving up
-until the upper sensor passes an inner magnet. On the B side the first inner magnet ends
+until the above-zone sensor passes an inner magnet. On the B side the first inner magnet ends
 about 27–37° past the zone (from the FL/RR logs), close to the ~40° leg-up hard stop on an
 FR/RL leg. Legs normally rest low, so this only matters if someone lifts a leg before
 calibrating.
@@ -270,9 +284,9 @@ Status line every 0.2 s and on every phase change:
 | `far zone edge at X deg (zone ~W deg wide), overtraveling 8.00 deg` | Far edge; W should repeat run to run |
 | `overtravel complete, reversing for second trigger` | Turning back |
 | `reverse both-active trigger at X deg, center target T deg` | Second zone entry, midpoint computed |
-| `AB/AD Calibration SUCCESS - centered at X deg (target T deg, err E deg)` | Done; E should be well under 1° |
+| `AB/AD Calibration SUCCESS - centered at X deg (target T deg, err E deg, max lag L deg)` | Done; E should be well under 1°, L well under 8° |
 
-Failures (cal stops, joint holds position, back to `MENU_MODE`):
+Failures (cal stops, back to `MENU_MODE`, motor off):
 
 | Message | Likely cause |
 |---|---|
@@ -285,6 +299,7 @@ Failures (cal stops, joint holds position, back to `MENU_MODE`):
 | `reverse trigger not found within expected travel` | Zone not re-entered on the way back |
 | `reached mechanical limit while centering` | Zone too close to the ±85° soft limit |
 | `center approach timeout` | Joint can't reach the midpoint (blocked, or gains too low) |
+| `joint blocked (lagging the command by > 8 deg); stopped` | Hit the stand, a hard stop or an obstacle; also cal gains too low for the load |
 
 ### Constants
 
@@ -301,6 +316,7 @@ Compile-time, in `hall_calibration.h` / `hall_calibration.c`:
 | `ABAD_CENTER_FINAL_TOL_DEG` | 1° |
 | `ABAD_CENTER_SETTLE_CYCLES` | 2000 (50 ms) |
 | `ABAD_CENTER_ZERO_TIMEOUT_CYCLES` | 400000 (10 s) |
+| `HALL_CAL_BLOCKED_DEG` / `HALL_CAL_BLOCKED_CYCLES` | 8° / 4000 (0.1 s), both routines |
 
 ### AB/AD limits outside calibration
 
@@ -371,25 +387,27 @@ trigger, center target, final err, result code, time taken.
 | # | Start position | Expected path | Pass if |
 |---|---|---|---|
 | 1 | Resting low, nothing active | `… found while probing, sweeping up` → zone → CENTER_REV → CENTER_ZERO | SUCCESS, err well under 1°, **never moves below the start** |
-| 2 | Resting low, on an inner magnet (lower sensor only) | `… active at start, sweeping up` → zone | SUCCESS, never moves below the start |
-| 3 | Just below center (upper sensor alone, sliver) | `… active at start, sweeping up` → zone | SUCCESS, no reversal, no jiggle |
+| 2 | Resting low, on an inner magnet (below-zone sensor only) | `… active at start, sweeping up` → zone | SUCCESS, never moves below the start |
+| 3 | Just below center (above-zone sensor alone, sliver) | `… active at start, sweeping up` → zone | SUCCESS, no reversal, no jiggle |
 | 4 | Inside the zone, once on each side of center | `backing out upward` → `cleared both-active zone, sweeping down` → zone | SUCCESS; lowest point ~8° under the zone |
-| 5 | Just above center (lower sensor alone, sliver) | up → `… dropped before zone, reversing down` → zone | SUCCESS, one reversal |
-| 6 | Above the zone, upper sensor on an inner magnet | up → `… dropped before zone, reversing down` → zone | SUCCESS, one reversal — **moves up first, keep a hand on the supply** |
-| 7 | Above the zone, nothing active | probe up → upper sensor appears → drops → reverse down | SUCCESS — **closest to the leg-up hard stop, keep a hand on the supply** |
+| 5 | Just above center (below-zone sensor alone, sliver) | up → `… dropped before zone, reversing down` → zone | SUCCESS, one reversal |
+| 6 | Above the zone, above-zone sensor on an inner magnet | up → `… dropped before zone, reversing down` → zone | SUCCESS, one reversal — **moves up first, keep a hand on the supply** |
+| 7 | Above the zone, nothing active | probe up → above-zone sensor appears → drops → reverse down | SUCCESS — **closest to the leg-up hard stop, keep a hand on the supply** |
 | 8 | Repeat case 1 five times, same start | — | Spread of final position (read encoder after cal) ≤ 0.5° |
 | 9 | One start from each of cases 1–6 | — | Same physical zero each time (mark the leg); zone width repeats within 1–2° |
 | 10 | FR/RL module (`MOTOR_POSITION` = 2), cases 1, 3, 4, 6 | Same messages as FL/RR; the first move is up on this leg too | SUCCESS. `second wrong-side reversal` means A/B sides are swapped on this leg |
-| 11 | Unplug the upper sensor, start resting low | Zone never appears | FAIL `reached mechanical limit…` — **keep a hand on the supply** |
+| 11 | Unplug the above-zone sensor, start resting low | Zone never appears | FAIL `reached mechanical limit…` — **keep a hand on the supply** |
 | 12 | During case 1, the host sends CONTROL frames (or `cansend` FC 5 with kp=500) | Frames ignored during `HALL_CALIBRATE` | Cal completes normally; no jump in p_des/kp |
 | 13 | Hip module, `MOTOR_POSITION` = 0, `h` | Hip `hall_calibrate()` | Regression: still SUCCESS |
+| 14 | During case 1, hold the leg by hand so it can't move up | Lag grows past 8° | FAIL `joint blocked …` within ~0.7 s, motor off |
+| 15 | Note the `max lag` on every SUCCESS line, on the robot (leg weight on) | — | Well under 8°; if not, raise the cal gains or tell me so the threshold can be revisited |
 
 ### Risks to watch
 
 1. **Sweep range is relative, not mechanical.** The ±85° soft limits are measured from
    the start, so FIND_ZERO can drive up to 85° before failing. With a dead sensor the leg
-   can reach the hard stop first and push into it at `ABAD_CAL_KP` until the soft limit
-   trips.
+   reaches a hard stop first; the blocked-joint check then stops it within about 0.7 s
+   (8° of lag at the cal speed, plus 0.1 s).
 2. **Starting above the zone moves up first**, up to the first inner magnet past the zone
    (or 30° when probing with nothing active), toward the leg-up hard stop.
 3. **Up direction comes from `MOTOR_POSITION`.** Set wrong, the first move goes down, toward
@@ -401,7 +419,7 @@ trigger, center target, final err, result code, time taken.
 
 ```
 date / board id / MOTOR_POSITION / fw commit:
-case | start | sensors at start | messages | fwd trig | rev trig | target | err | code | time | notes
+case | start | sensors at start | messages | fwd trig | rev trig | target | err | max lag | code | time | notes
 ```
 
 ## Registers
@@ -429,6 +447,10 @@ return read-only.
 
 ### 2026-10-16
 
+- **Blocked-joint check.** Both routines fail with "joint blocked" (motor off) when the joint
+  lags the calibration command by more than 8° for 0.1 s. Before, a blocked leg was pushed
+  harder and harder until the ±85° soft limit (or the 10 s centering timeout). SUCCESS
+  lines now print the run's max lag.
 - **AB/AD always moves up first.** Moving down from an unknown start could drive the leg
   into the robot stand. Starts below the zone never go below the start; starts in or above
   the zone go at most 8° below the zone's bottom edge. `MOTOR_POSITION` is 0 = hip, 1 =

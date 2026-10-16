@@ -27,6 +27,8 @@ static void abad_enter_find_zero(int dir, float joint_theta);
 static int abad_up_dir(void);
 static const char *abad_dir_name(int dir);
 static const char *abad_phase_name(uint8_t phase);
+static void cal_blocked_reset(void);
+static uint8_t cal_joint_blocked(float command, float theta);
 
 float abad_controller_to_joint_angle(float controller_angle){
     while(controller_angle > PI_F){
@@ -60,6 +62,25 @@ float abad_clamp_joint_angle(float joint_angle){
 
 uint8_t abad_joint_angle_in_limits(float joint_angle){
     return (joint_angle >= ABAD_LIMIT_MIN_RAD && joint_angle <= ABAD_LIMIT_MAX_RAD);
+}
+
+/* Blocked-joint check shared by both routines (see HALL_CAL_BLOCKED_DEG). */
+static uint32_t cal_blocked_cycles = 0;
+static float cal_max_lag = 0.0f;
+
+static void cal_blocked_reset(void){
+    cal_blocked_cycles = 0;
+    cal_max_lag = 0.0f;
+}
+
+static uint8_t cal_joint_blocked(float command, float theta){
+    float lag = fabsf(abad_controller_to_joint_angle(command - theta));   // wrapped to [-pi, pi]
+    if (lag > cal_max_lag) cal_max_lag = lag;
+    if (lag <= HALL_CAL_BLOCKED_RAD) {
+        cal_blocked_cycles = 0;
+        return 0;
+    }
+    return (++cal_blocked_cycles >= HALL_CAL_BLOCKED_CYCLES);
 }
 
 /* Calibration state */
@@ -119,6 +140,11 @@ void abad_hall_calibrate(FSMStruct * fsmstate) {
 
     if (MOTOR_POSITION == MOTOR_POS_HIP) {
         abad_cal_fail(fsmstate, "AB/AD calibration failed - motor configured as HIP");
+        return;
+    }
+
+    if (cal_joint_blocked(controller.p_des, controller.theta_mech)) {
+        abad_cal_fail(fsmstate, "AB/AD calibration failed - joint blocked (lagging the command by > 8 deg); stopped");
         return;
     }
 
@@ -200,6 +226,7 @@ void abad_cal_reset(void){
     abad_watch_off_joint = 0.0f;
     abad_find_zero_reversed = 0;
     abad_center_zero_cycles = 0;
+    cal_blocked_reset();
     // FIND_FIRST_SENSOR inspects the live sensor state on its first cycle and picks the
     // correct direction (or backs out of the both-active zone), so no start-position
     // special-casing is needed here.
@@ -213,7 +240,7 @@ void abad_cal_reset(void){
  *   both active      -> BACKOUT up until the zone clears, then sweep down into it.
  *   one active       -> sweep up.
  *   nothing active   -> probe up (<= ABAD_PROBE_TRAVEL_DEG); once a sensor appears, keep going.
- * Starting above the zone, the upper sensor pulses on an inner magnet and FIND_ZERO's
+ * Starting above the zone, the above-zone sensor pulses on an inner magnet and FIND_ZERO's
  * wrong-side rule turns the sweep down; downward travel only happens once the zone is
  * known to be below.
  */
@@ -470,10 +497,11 @@ static void abad_cal_center_zero(FSMStruct * fsmstate) {
         encoder_set_zero();
         printf("AB/AD zero position set\r\n");
         fsmstate->next_state = MOTOR_MODE;
-        printf("AB/AD Calibration SUCCESS - centered at %.2f deg (target %.2f deg, err %.2f deg)\r\n",
+        printf("AB/AD Calibration SUCCESS - centered at %.2f deg (target %.2f deg, err %.2f deg, max lag %.1f deg)\r\n",
             (double)(joint_theta * 180.0f / PI_F),
             (double)(abad_zero_target * 180.0f / PI_F),
-            (double)(error * 180.0f / PI_F));
+            (double)(error * 180.0f / PI_F),
+            (double)(cal_max_lag * 180.0f / PI_F));
         can_send_cal_status(0.0f, comm_encoder.velocity/GR, 0.0f,
                             CODE_HALL_CAL_SUCCESS, MOTOR_MODE);
         return;
@@ -544,6 +572,7 @@ void hall_cal_reset(void){
     hip_centering = 0;
     hip_backout_clear = 0;
     hip_backing_out = (HAL_GPIO_ReadPin(HALL_IO) == 0);
+    cal_blocked_reset();
     // Treat the sensor as off at the start of every run, as after boot, so the reading
     // left over from the previous run isn't counted as an edge.
     hall_cal.hall_preinput = 1;
@@ -563,7 +592,11 @@ void hall_calibrate(FSMStruct * fsmstate){
     if (state_before == CODE_HALL_CALIBRATING) {
         hall_cal.hall_input = HAL_GPIO_ReadPin(HALL_IO);
 
-        if (dir != 1 && dir != -1) {
+        if (cal_joint_blocked(controller.p_des, theta)) {
+            hip_fail_reason = "joint blocked (lagging the command by > 8 deg); stopped";
+            hall_cal.hall_cal_state = CODE_HALL_CAL_FAIL;
+            fsmstate->next_state = MENU_MODE;
+        } else if (dir != 1 && dir != -1) {
             hip_fail_reason = "HALL_CAL_DIR must be 1 or -1";
             hall_cal.hall_cal_state = CODE_HALL_CAL_FAIL;
             fsmstate->next_state = MENU_MODE;
@@ -645,8 +678,8 @@ void hall_calibrate(FSMStruct * fsmstate){
     int state_after = hall_cal.hall_cal_state;
     if (state_before == CODE_HALL_CALIBRATING && state_after != CODE_HALL_CALIBRATING) {
         if (state_after == CODE_HALL_CAL_SUCCESS) {
-            printf("HIP Hall Cal: SUCCESS  center=%.1f deg (now zero)\r\n",
-                   (double)(hall_cal.hall_mid_pos * 180.0f / PI_F));
+            printf("HIP Hall Cal: SUCCESS  center=%.1f deg (now zero), max lag %.1f deg\r\n",
+                   (double)(hall_cal.hall_mid_pos * 180.0f / PI_F), (double)(cal_max_lag * 180.0f / PI_F));
         } else {
             printf("HIP Hall Cal: FAIL  %s\r\n", hip_fail_reason);
         }
