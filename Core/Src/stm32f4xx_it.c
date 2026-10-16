@@ -308,15 +308,6 @@ void can_tx_rx(void){
 					break;
 
 				case FC_HALL_CAL:
-					hall_cal.hall_cal_count = 0;
-					hall_cal.hall_cal_state = CODE_HALL_CALIBRATING; // calibrating
-					/*----- convert theta_mech to 0~359.9999deg -----*/
-					hall_cal.hall_present_pos = controller.theta_mech;
-					hall_cal.hall_cal_pcmd = controller.theta_mech;
-					static float _f_cal_round;
-					modff(hall_cal.hall_cal_pcmd/(2*PI_F),&_f_cal_round);
-					hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd - _f_cal_round*2*PI_F;
-					if(hall_cal.hall_cal_pcmd < 0) hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd + 2*PI_F;
 					update_fsm(&state, HALL_CAL_CMD);
 					pack_reply_hall_cal(can_rx, &can_tx, VERSION_NUM, state.state);
 					break;
@@ -328,12 +319,21 @@ void can_tx_rx(void){
 
 				case FC_CONTROL_CMD:
 					pack_reply_default(can_rx, &can_tx, comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR, controller.i_q_filt*KT*GR, VERSION_NUM, hall_cal.hall_cal_state, state.state);	// Pack response
-					unpack_control_cmd(can_rx, controller.commands);	// Unpack commands
+					// Hall calibration drives p_des/kp itself; a control frame
+					// unpacked mid-cal would overwrite them through the
+					// controller.commands union. Reply, but leave them alone.
+					if (state.state != HALL_CALIBRATE) {
+						unpack_control_cmd(can_rx, controller.commands);	// Unpack commands
+					}
 
 					controller.timeout = 0;					    // Reset timeout counter
 					controller.i_mag_max = controller.i_q;
 					break;
-
+				case FC_GET_STATE:
+					// Read-only: report state + hall_cal_state without calling update_fsm
+					// or unpack_*, so it can never mutate the FSM from any mode.
+					pack_reply_default(can_rx, &can_tx, comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR, controller.i_q_filt*KT*GR, VERSION_NUM, hall_cal.hall_cal_state, state.state);
+					break;
 				default:
 					pack_reply_default(can_rx, &can_tx, comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR, controller.i_q_filt*KT*GR, VERSION_NUM, hall_cal.hall_cal_state, state.state);	// Pack response
 					break;

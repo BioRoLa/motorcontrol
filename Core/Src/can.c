@@ -50,8 +50,8 @@ void MX_CAN1_Init(void)
   hcan1.Init.TimeTriggeredMode = DISABLE;
   hcan1.Init.AutoBusOff = DISABLE;
   hcan1.Init.AutoWakeUp = DISABLE;
-  hcan1.Init.AutoRetransmission = DISABLE;
-  hcan1.Init.ReceiveFifoLocked = ENABLE;
+  hcan1.Init.AutoRetransmission = ENABLE;
+  hcan1.Init.ReceiveFifoLocked = DISABLE;
   hcan1.Init.TransmitFifoPriority = DISABLE;
   if (HAL_CAN_Init(&hcan1) != HAL_OK)
   {
@@ -236,19 +236,28 @@ void pack_reply_hall_cal(CANRxMessage rx_msg, CANTxMessage *tx_msg, int version,
 	tx_msg->data[7] = (version<<4) + (state&0xF);
 }
 
-/// CAN Command Packet Structure ///
-/// 16 bit position command, between -4*pi and 4*pi
-/// 12 bit velocity command, between -30 and + 30 rad/s
-/// 12 bit kp, between 0 and 500 N-m/rad
-/// 12 bit kd, between 0 and 100 N-m*s/rad
-/// 12 bit feed forward torque, between -18 and 18 N-m
+void can_send_cal_status(float p, float v, float t, int cal_state, int fsm_state) {
+    uint32_t TxMailbox;
+    pack_reply_default(can_rx, &can_tx, p, v, t, (int)VERSION_NUM, cal_state, fsm_state);
+    can_tx.tx_header.StdId = can_rx.rx_header.StdId | 0x400;
+    HAL_CAN_AddTxMessage(&CAN_H, &can_tx.tx_header, can_tx.data, &TxMailbox);
+}
+
+/// CAN Command Packet Structure (FC_CONTROL_CMD) ///
+/// 16 bit position command, between P_MIN and P_MAX (0 .. 2*pi)
+/// 12 bit kp, between 0 and KP_MAX N-m/rad
+/// 12 bit ki, between 0 and KI_MAX
+/// 12 bit kd, between 0 and KD_MAX N-m*s/rad
+/// 12 bit feed forward torque, between T_MIN and T_MAX N-m
+/// The host (fpga_driver can_packet.h) packs with fixed ranges; P/T_MIN/MAX and
+/// KP/KI/KD_MAX must match them or every value is silently rescaled.
 /// CAN Packet is 8 8-bit words
 /// Formatted as follows.  For each quantity, bit 0 is LSB
 /// 0: [position[15-8]]
 /// 1: [position[7-0]]
-/// 2: [velocity[11-4]]
-/// 3: [velocity[3-0], kp[11-8]]
-/// 4: [kp[7-0]]
+/// 2: [kp[11-4]]
+/// 3: [kp[3-0], ki[11-8]]
+/// 4: [ki[7-0]]
 /// 5: [kd[11-4]]
 /// 6: [kd[3-0], torque[11-8]]
 /// 7: [torque[7-0]]
@@ -263,7 +272,7 @@ void unpack_control_cmd(CANRxMessage rx_msg, float *commands){// ControllerStruc
         commands[1] = uint_to_float(kp_int, KP_MIN, KP_MAX, 12);
         commands[2] = uint_to_float(ki_int, KI_MIN, KI_MAX, 12);
         commands[3] = uint_to_float(kd_int, KD_MIN, KD_MAX, 12);
-        commands[4] = uint_to_float(t_int, -I_MAX*KT*GR, I_MAX*KT*GR, 12);
+        commands[4] = uint_to_float(t_int, T_MIN, T_MAX, 12);
     //printf("Received   ");
     //printf("%.3f  %.3f  %.3f  %.3f  %.3f   %.3f", controller->p_des, controller->v_des, controller->kp, controller->kd, controller->t_ff, controller->i_q_ref);
     //printf("\n\r");

@@ -12,6 +12,8 @@
 #include "math_ops.h"
 #include "hw_config.h"
 #include "user_config.h"
+#include "hall_calibration.h"
+#include <stdio.h>
 
 void set_dtc(ControllerStruct *controller){
 
@@ -162,6 +164,8 @@ void reset_foc(ControllerStruct *controller){
     controller->v_d = 0;
     controller->fw_int = 0;
     controller->otw_flag = 0;
+    controller->dtheta_mech = 0.0f;
+    in_err = 0.0f;
 
     }
 
@@ -290,6 +294,25 @@ void commutate(ControllerStruct *controller, EncoderStruct *encoder)
 void torque_control(ControllerStruct *controller){
 	/*----- convert theta_mech to 0~359.9999deg -----*/
 	static float pos, round;
+    if(MOTOR_POSITION != MOTOR_POS_HIP){
+        static uint8_t abad_limit_error_latched = 0;
+        static float abad_last_rejected_setpoint = 1000.0f;
+        float joint_setpoint = abad_controller_to_joint_angle(controller->p_des);
+        if(!abad_joint_angle_in_limits(joint_setpoint)){
+            if((!abad_limit_error_latched) || (fabsf(joint_setpoint - abad_last_rejected_setpoint) > 0.001f)){
+                printf("Error: AB/AD command %.1f deg outside mechanical limits [%.1f, %.1f] deg\r\n",
+                    joint_setpoint * 180.0f / PI_F,
+                    ABAD_LIMIT_MIN_DEG,
+                    ABAD_LIMIT_MAX_DEG);
+                abad_last_rejected_setpoint = joint_setpoint;
+                abad_limit_error_latched = 1;
+            }
+            controller->i_q_des = 0.0f;
+            controller->i_d_des = 0.0f;
+            return;
+        }
+        abad_limit_error_latched = 0;
+    }
 	pos = controller->theta_mech;
 	modff(pos/(2*PI_F),&round);
 	pos = pos - round*2*PI_F;
@@ -316,7 +339,16 @@ void torque_control(ControllerStruct *controller){
 			err = controller->p_des - pos;
 		}
 	}
-	in_err = in_err + err;
+	// Anti-windup: with ki == 0 (the KI_MAX default) the integrator used to
+	// grow unbounded, so a later non-zero ki would apply it as a torque step.
+	// Keep ki*in_err within the commandable torque.
+	if (controller->ki > 0.0f) {
+		float in_err_max = (I_MAX*KT*GR) / controller->ki;
+		in_err = fminf(fmaxf(in_err + err, -in_err_max), in_err_max);
+	}
+	else {
+		in_err = 0.0f;
+	}
 
     float torque_ref = controller->kp*(err) + controller->t_ff + controller->ki*(in_err) + controller->kd*(-controller->dtheta_mech);
     controller->i_q_des = torque_ref/(KT*GR);

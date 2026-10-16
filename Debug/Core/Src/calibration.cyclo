@@ -1,3 +1,0 @@
-../Core/Src/calibration.c:17:6:order_phases	5
-../Core/Src/calibration.c:70:6:calibrate_encoder	16
-../Core/Src/calibration.c:171:6:measure_lr	1

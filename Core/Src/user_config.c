@@ -195,6 +195,26 @@ void user_config_initialize(void){
 	float_reg_config[ADDR_MOTOR_MODE_KD].f_MIN		= MIN_MOTOR_MODE_KD;
 	float_reg_config[ADDR_MOTOR_MODE_KD].f_MAX		= MAX_MOTOR_MODE_KD;
 
+	float_reg_config[ADDR_ABAD_CAL_SPEED].name		= NAME_ABAD_CAL_SPEED;
+	float_reg_config[ADDR_ABAD_CAL_SPEED].cmd		= CMD_ABAD_CAL_SPEED;
+	float_reg_config[ADDR_ABAD_CAL_SPEED].f_MIN		= MIN_ABAD_CAL_SPEED;
+	float_reg_config[ADDR_ABAD_CAL_SPEED].f_MAX		= MAX_ABAD_CAL_SPEED;
+
+	float_reg_config[ADDR_ABAD_CAL_KP].name		= NAME_ABAD_CAL_KP;
+	float_reg_config[ADDR_ABAD_CAL_KP].cmd			= CMD_ABAD_CAL_KP;
+	float_reg_config[ADDR_ABAD_CAL_KP].f_MIN		= MIN_ABAD_CAL_KP;
+	float_reg_config[ADDR_ABAD_CAL_KP].f_MAX		= MAX_ABAD_CAL_KP;
+
+	float_reg_config[ADDR_ABAD_CAL_KI].name		= NAME_ABAD_CAL_KI;
+	float_reg_config[ADDR_ABAD_CAL_KI].cmd			= CMD_ABAD_CAL_KI;
+	float_reg_config[ADDR_ABAD_CAL_KI].f_MIN		= MIN_ABAD_CAL_KI;
+	float_reg_config[ADDR_ABAD_CAL_KI].f_MAX		= MAX_ABAD_CAL_KI;
+
+	float_reg_config[ADDR_ABAD_CAL_KD].name		= NAME_ABAD_CAL_KD;
+	float_reg_config[ADDR_ABAD_CAL_KD].cmd			= CMD_ABAD_CAL_KD;
+	float_reg_config[ADDR_ABAD_CAL_KD].f_MIN		= MIN_ABAD_CAL_KD;
+	float_reg_config[ADDR_ABAD_CAL_KD].f_MAX		= MAX_ABAD_CAL_KD;
+
 	// initialize the int_reg_config array
 	int_reg_config[ADDR_PHASE_ORDER].name			= NAME_PHASE_ORDER;
 	int_reg_config[ADDR_PHASE_ORDER].cmd			= CMD_PHASE_ORDER;
@@ -235,38 +255,62 @@ void user_config_initialize(void){
 	int_reg_config[ADDR_ENCODER_LUT].cmd			= CMD_ENCODER_LUT;
 	int_reg_config[ADDR_ENCODER_LUT].i_MIN			= MIN_ENCODER_LUT;
 	int_reg_config[ADDR_ENCODER_LUT].i_MAX			= MAX_ENCODER_LUT;
+
+	int_reg_config[ADDR_MOTOR_POSITION].name		= NAME_MOTOR_POSITION;
+	int_reg_config[ADDR_MOTOR_POSITION].cmd			= CMD_MOTOR_POSITION;
+	int_reg_config[ADDR_MOTOR_POSITION].i_MIN		= MIN_MOTOR_POSITION;
+	int_reg_config[ADDR_MOTOR_POSITION].i_MAX		= MAX_MOTOR_POSITION;
 }
 
+/*
+ * Shared write rules for both UART setup and CAN FC_MANAGE_CONFIG, so the two paths
+ * accept and reject exactly the same values. Registers with cmd ' ' are read-only.
+ */
+static int float_reg_set(int addr, float f_data){
+	if (float_reg_config[addr].cmd == ' '){
+		return CODE_READ_ONLY;
+	}
+	if (!isfinite(f_data) || (float_reg_config[addr].f_MIN > f_data) || (float_reg_config[addr].f_MAX < f_data)){
+		return CODE_INVALID_VALUE;
+	}
+	__float_reg[addr] = f_data;
+	return CODE_CONFIG_SUCCESS;
+}
+
+static int int_reg_set(int addr, int i_data){
+	if (int_reg_config[addr].cmd == ' '){
+		return CODE_READ_ONLY;
+	}
+	if ((int_reg_config[addr].i_MIN > i_data) || (int_reg_config[addr].i_MAX < i_data) ||
+		((addr == ADDR_HALL_CAL_DIR) && (i_data == 0))){
+		return CODE_INVALID_VALUE;
+	}
+	__int_reg[addr] = i_data;
+	return CODE_CONFIG_SUCCESS;
+}
+
+static void flush_prefs(void){
+	if (!preference_writer_ready(prefs)){ preference_writer_open(&prefs);}
+	preference_writer_flush(&prefs);
+	preference_writer_close(&prefs);
+	preference_writer_load(prefs);
+}
+
+/* UART: look the register up by its setup key. ' ' marks "no key", so it never matches. */
 char* float_reg_update_uart(char cmd, const char *c_data){
     static char response[100];
 	float f_data = atof(c_data);
 
-	if (!isfinite(f_data)){
-		return STR_INVALID_VALUE;
+	if (cmd == ' '){
+		return STR_INVALID_CMD;
 	}
-
 	for (int i=0; i<FLOAT_REG_LENGTH; i++){
 		if (float_reg_config[i].cmd == cmd){
-			if ((float_reg_config[i].f_MIN > f_data) || (float_reg_config[i].f_MAX < f_data)){
+			if (float_reg_set(i, f_data) != CODE_CONFIG_SUCCESS){
 				return STR_INVALID_VALUE;
 			}
-			else if (i == ADDR_V_MAX){
-				__float_reg[ADDR_V_MAX] = f_data;
-				__float_reg[ADDR_V_MIN] = -f_data;
-                sprintf(response, "%s set to %f\r\n", float_reg_config[i].name, f_data);
-				return response;
-			}
-			else if (i == ADDR_T_MAX){
-				__float_reg[ADDR_T_MAX] = f_data;
-				__float_reg[ADDR_T_MIN] = -f_data;
-                sprintf(response, "%s set to %f\r\n", float_reg_config[i].name, f_data);
-				return response;
-			}
-			else{
-				__float_reg[i] = f_data;
-                sprintf(response, "%s set to %f\r\n", float_reg_config[i].name, f_data);
-				return response;
-			}
+            sprintf(response, "%s set to %f\r\n", float_reg_config[i].name, f_data);
+			return response;
 		}
 	}
 	return STR_INVALID_CMD;
@@ -276,41 +320,28 @@ int float_reg_update_can(int addr, float f_data){
 	if (addr < 0 || addr >= FLOAT_REG_LENGTH){
 		return CODE_INVALID_ADDR;
 	}
-	else if (!isfinite(f_data)){
-		return CODE_INVALID_VALUE;
+	float old = __float_reg[addr];
+	int code = float_reg_set(addr, f_data);
+	if (code == CODE_CONFIG_SUCCESS && old != f_data){
+		flush_prefs();
 	}
-	else if (float_reg_config[addr].cmd == ' '){
-		return CODE_READ_ONLY;
-	}
-	else if ((float_reg_config[addr].f_MIN > f_data) || (float_reg_config[addr].f_MAX < f_data)){
-		return CODE_INVALID_VALUE;
-	}
-	else{
-		if (__float_reg[addr] != f_data){
-			__float_reg[addr] = f_data;
-			if (!preference_writer_ready(prefs)){ preference_writer_open(&prefs);}
-			preference_writer_flush(&prefs);
-			preference_writer_close(&prefs);
-			preference_writer_load(prefs);
-		}
-		return CODE_CONFIG_SUCCESS;
-	}
+	return code;
 }
 
 char* int_reg_update_uart(char cmd, const char *c_data){
     static char response[100];
 	int i_data = atoi(c_data);
 
+	if (cmd == ' '){
+		return STR_INVALID_CMD;
+	}
 	for (int i=0; i<INT_REG_LENGTH; i++){
 		if (int_reg_config[i].cmd == cmd){
-			if ((int_reg_config[i].i_MIN > i_data) || (int_reg_config[i].i_MAX < i_data)){
+			if (int_reg_set(i, i_data) != CODE_CONFIG_SUCCESS){
 				return STR_INVALID_VALUE;
 			}
-			else{
-				__int_reg[i] = i_data;
-                sprintf(response, "%s set to %d\r\n", int_reg_config[i].name, i_data);
-				return response;
-			}
+            sprintf(response, "%s set to %d\r\n", int_reg_config[i].name, i_data);
+			return response;
 		}
 	}
 	return STR_INVALID_CMD;
@@ -320,21 +351,10 @@ int int_reg_update_can(int addr, int i_data){
 	if (addr < 0 || addr >= INT_REG_LENGTH){
 		return CODE_INVALID_ADDR;
 	}
-	else if (int_reg_config[addr].cmd == ' '){
-		return CODE_READ_ONLY;
+	int old = __int_reg[addr];
+	int code = int_reg_set(addr, i_data);
+	if (code == CODE_CONFIG_SUCCESS && old != i_data){
+		flush_prefs();
 	}
-	else if (((int_reg_config[addr].i_MIN > i_data) || (int_reg_config[addr].i_MAX < i_data)) ||
-			((addr == ADDR_HALL_CAL_DIR) && (i_data == 0))){
-		return CODE_INVALID_VALUE;
-	}
-	else{
-		if (__int_reg[addr] != i_data){
-			__int_reg[addr] = i_data;
-			if (!preference_writer_ready(prefs)){ preference_writer_open(&prefs);}
-			preference_writer_flush(&prefs);
-			preference_writer_close(&prefs);
-			preference_writer_load(prefs);
-		}
-		return CODE_CONFIG_SUCCESS;
-	}
+	return code;
 }

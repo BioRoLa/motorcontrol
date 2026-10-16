@@ -118,39 +118,49 @@ extern "C" {
 #define MIN_I_CAL				0.0f								// Calibration Current
 #define MAX_I_CAL				20.0f								// Calibration Current
 
+/* CAN wire-format scaling. Position commands are packed over P_MIN..P_MAX, velocity and
+ * torque (replies and the feed-forward torque command) over V_MIN..V_MAX / T_MIN..T_MAX.
+ * They must equal the host's constants (fpga_driver include/can_packet.h: P_CMD_MIN/MAX,
+ * V_MIN/MAX, T_MIN/MAX) or every value is silently rescaled, so the registers are
+ * read-only and set to these at boot. */
+#define CAN_P_MIN				0.0f
+#define CAN_P_MAX				6.283185f
+#define CAN_V_MAX				45.0f
+#define CAN_T_MAX				20.0f
+
 #define NAME_P_MIN				"P_MIN"								// Position setpoint lower limit (rad)
 #define ADDR_P_MIN				19									// Position setpoint lower limit (rad)
-#define CMD_P_MIN				'_'									// Position setpoint lower limit (rad)
+#define CMD_P_MIN				' '									// Read-only, CAN_P_MIN at boot
 #define MIN_P_MIN				GLOBAL_MIN_VALUE								// Position setpoint lower limit (rad)
 #define MAX_P_MIN				0.0f								// Position setpoint lower limit (rad)
 
 #define NAME_P_MAX				"P_MAX"								// Position setupoint upper bound (rad)
 #define ADDR_P_MAX				20									// Position setupoint upper bound (rad)
-#define CMD_P_MAX				'p'									// Position setupoint upper bound (rad)
+#define CMD_P_MAX				' '									// Read-only, CAN_P_MAX at boot
 #define MIN_P_MAX				0.0f								// Position setupoint upper bound (rad)
 #define MAX_P_MAX				GLOBAL_MAX_VALUE					// Position setupoint upper bound (rad)
 
 #define NAME_V_MIN				"V_MIN"								// Velocity setpoint lower bound (rad/s)
 #define ADDR_V_MIN				21									// Velocity setpoint lower bound (rad/s)
-#define CMD_V_MIN				'_'									// Velocity setpoint lower bound (rad/s)
+#define CMD_V_MIN				' '									// Read-only, -CAN_V_MAX at boot
 #define MIN_V_MIN				GLOBAL_MIN_VALUE					// Velocity setpoint lower bound (rad/s)
 #define MAX_V_MIN				0.0f								// Velocity setpoint lower bound (rad/s)
 
 #define NAME_V_MAX				"V_MAX"								// Velocity setpoint upper bound (rad/s)
 #define ADDR_V_MAX				22									// Velocity setpoint upper bound (rad/s)
-#define CMD_V_MAX				'v'									// Velocity setpoint upper bound (rad/s)
+#define CMD_V_MAX				' '									// Read-only, CAN_V_MAX at boot
 #define MIN_V_MAX				0.0f								// Velocity setpoint upper bound (rad/s)
 #define MAX_V_MAX				GLOBAL_MAX_VALUE					// Velocity setpoint upper bound (rad/s)
 
 #define NAME_T_MIN     			"T_MIN"
 #define ADDR_T_MIN			    23
-#define CMD_T_MIN		     	'_'
+#define CMD_T_MIN		     	' '									// Read-only, -CAN_T_MAX at boot
 #define MIN_T_MIN		     	GLOBAL_MIN_VALUE
 #define MAX_T_MIN		     	0.0f
 
 #define NAME_T_MAX     			"T_MAX"
 #define ADDR_T_MAX			    24
-#define CMD_T_MAX		     	'T'
+#define CMD_T_MAX		     	' '									// Read-only, CAN_T_MAX at boot
 #define MIN_T_MAX		     	0.0f
 #define MAX_T_MAX		     	GLOBAL_MAX_VALUE
 
@@ -158,19 +168,19 @@ extern "C" {
 #define ADDR_KP_MAX				25									// Max position gain (N-m/rad)
 #define CMD_KP_MAX				'k'									// Max position gain (N-m/rad)
 #define MIN_KP_MAX				0.0f								// Max position gain (N-m/rad)
-#define MAX_KP_MAX				GLOBAL_MAX_VALUE					// Max position gain (N-m/rad)
+#define MAX_KP_MAX				500.0f								// Must not exceed the host's 12-bit kp scale (fpga_driver can_packet.h KP_MAX)
 
 #define NAME_KI_MAX				"KI_MAX"
 #define ADDR_KI_MAX				26
 #define CMD_KI_MAX				'i'
 #define MIN_KI_MAX				0.0f
-#define MAX_KI_MAX				GLOBAL_MAX_VALUE
+#define MAX_KI_MAX				10.0f								// fpga_driver can_packet.h KI_MAX
 
 #define NAME_KD_MAX				"KD_MAX"							// Max velocity gain (N-m/rad/s)
 #define ADDR_KD_MAX				27									// Max velocity gain (N-m/rad/s)
 #define CMD_KD_MAX				'd'									// Max velocity gain (N-m/rad/s)
 #define MIN_KD_MAX				0.0f								// Max velocity gain (N-m/rad/s)
-#define MAX_KD_MAX				GLOBAL_MAX_VALUE					// Max velocity gain (N-m/rad/s)
+#define MAX_KD_MAX				5.0f								// fpga_driver can_packet.h KD_MAX
 
 #define NAME_HALL_CAL_OFFSET    "HALL_CAL_OFFSET"
 #define ADDR_HALL_CAL_OFFSET    28
@@ -220,6 +230,33 @@ extern "C" {
 #define MIN_MOTOR_MODE_KD        0.0f
 #define MAX_MOTOR_MODE_KD        5.0f
 
+// float reg 36 is unused (was ABAD_CAL_OFFSET, which no calibration code ever read).
+// Left empty so the flash layout is unchanged.
+
+#define NAME_ABAD_CAL_SPEED     "ABAD_CAL_SPEED"
+#define ADDR_ABAD_CAL_SPEED     37
+#define CMD_ABAD_CAL_SPEED     	'S'
+#define MIN_ABAD_CAL_SPEED     	0.0f
+#define MAX_ABAD_CAL_SPEED     	10.0f
+
+#define NAME_ABAD_CAL_KP        "ABAD_CAL_KP"
+#define ADDR_ABAD_CAL_KP        38
+#define CMD_ABAD_CAL_KP         'J'
+#define MIN_ABAD_CAL_KP         0.0f
+#define MAX_ABAD_CAL_KP         1000.0f
+
+#define NAME_ABAD_CAL_KI        "ABAD_CAL_KI"
+#define ADDR_ABAD_CAL_KI        39
+#define CMD_ABAD_CAL_KI         'U'
+#define MIN_ABAD_CAL_KI         0.0f
+#define MAX_ABAD_CAL_KI         10.0f
+
+#define NAME_ABAD_CAL_KD        "ABAD_CAL_KD"
+#define ADDR_ABAD_CAL_KD        40
+#define CMD_ABAD_CAL_KD         'V'
+#define MIN_ABAD_CAL_KD         0.0f
+#define MAX_ABAD_CAL_KD         5.0f
+
 
 #define I_BW                    __float_reg[ADDR_I_BW]	            // Current loop bandwidth
 #define I_MAX                   __float_reg[ADDR_I_MAX]             // Current limit
@@ -255,6 +292,10 @@ extern "C" {
 #define MOTOR_MODE_KP           __float_reg[ADDR_MOTOR_MODE_KP]
 #define MOTOR_MODE_KI           __float_reg[ADDR_MOTOR_MODE_KI]
 #define MOTOR_MODE_KD           __float_reg[ADDR_MOTOR_MODE_KD]
+#define ABAD_CAL_SPEED          __float_reg[ADDR_ABAD_CAL_SPEED]
+#define ABAD_CAL_KP             __float_reg[ADDR_ABAD_CAL_KP]
+#define ABAD_CAL_KI             __float_reg[ADDR_ABAD_CAL_KI]
+#define ABAD_CAL_KD             __float_reg[ADDR_ABAD_CAL_KD]
 
 
 #define NAME_PHASE_ORDER        "PHASE_ORDER"	                    // Phase swapping during calibration
@@ -299,11 +340,26 @@ extern "C" {
 #define MIN_HALL_CAL_DIR       	-1
 #define MAX_HALL_CAL_DIR       	1
 
+// int reg 7 is unused (was ABAD_CAL_DIR; AB/AD cal directions are fixed in motor angle,
+// see ABAD_A_SIDE_DIR in hall_calibration.h). Left empty so the flash layout is unchanged.
+
 #define NAME_ENCODER_LUT        "ENCODER_LUT"
-#define ADDR_ENCODER_LUT        7
+#define ADDR_ENCODER_LUT        8
 #define CMD_ENCODER_LUT        	' '
 #define MIN_ENCODER_LUT        	GLOBAL_MIN_VALUE
 #define MAX_ENCODER_LUT        	GLOBAL_MAX_VALUE
+
+#define NAME_MOTOR_POSITION     "MOTOR_POSITION"
+#define ADDR_MOTOR_POSITION     136
+#define CMD_MOTOR_POSITION     	'P'
+#define MIN_MOTOR_POSITION     	0
+#define MAX_MOTOR_POSITION     	2
+
+/* Motor role. For AB/AD the value only says which motor direction lifts the leg (the hall
+ * layout is the same on every leg in motor angle); calibration always moves up first. */
+#define MOTOR_POS_HIP             0  // Hip flexion/extension
+#define MOTOR_POS_ABAD_FLRR       1  // AB/AD front-left / rear-right: leg up = -angle (checked on RR)
+#define MOTOR_POS_ABAD_FRRL       2  // AB/AD front-right / rear-left: leg up = +angle
 
 
 #define PHASE_ORDER             __int_reg[ADDR_PHASE_ORDER]         // Phase swapping during calibration
@@ -313,7 +369,8 @@ extern "C" {
 #define M_ZERO					__int_reg[ADDR_M_ZERO]
 #define E_ZERO					__int_reg[ADDR_E_ZERO]
 #define HALL_CAL_DIR            __int_reg[ADDR_HALL_CAL_DIR]
-#define ENCODER_LUT             __int_reg[ADDR_ENCODER_LUT]         // Encoder offset LUT - 128 elements long
+#define ENCODER_LUT             __int_reg[ADDR_ENCODER_LUT]         // Encoder offset LUT spans int regs [8..135]
+#define MOTOR_POSITION          __int_reg[ADDR_MOTOR_POSITION]      // Motor role (MOTOR_POS_HIP, MOTOR_POS_ABAD_FLRR, MOTOR_POS_ABAD_FRRL)
 
 
 #define STR_INVALID_VALUE		"Not a valid value\r\n"
@@ -328,6 +385,7 @@ extern "C" {
 #define CODE_HALL_CALIBRATING	1
 #define CODE_HALL_CAL_SUCCESS	2
 #define CODE_HALL_CAL_FAIL		3
+
 
 
 struct FloatRegConfig{

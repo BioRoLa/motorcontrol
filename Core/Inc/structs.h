@@ -43,5 +43,6 @@ extern CalStruct comm_encoder_cal;
 extern CANTxMessage can_tx;
 extern CANRxMessage can_rx;
 extern HallCalStruct hall_cal;
+extern HallCalStructABAD abad_cal;
 
 #endif

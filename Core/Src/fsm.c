@@ -17,6 +17,10 @@
 #include "math_ops.h"
 #include "position_sensor.h"
 #include "drv8323.h"
+#include "hall_calibration.h"
+#include "version_info.h"
+
+static uint8_t hall_debug_started = 0;   // cleared on entering HALL_DEBUG_MODE
 
  void run_fsm(FSMStruct * fsmstate){
 	 /* run_fsm is run every commutation interrupt cycle */
@@ -80,19 +84,22 @@
 			 break;
 
 		 case HALL_CALIBRATE:
-			 /* If CAN has timed out, reset all commands */
-			 if((CAN_TIMEOUT > 0 ) && (controller.timeout > CAN_TIMEOUT)){
-				 zero_commands(&controller);
+			 /* No CAN timeout here: calibration drives its own p_des/gains and has its
+			  * own failure bounds, and control frames (the only thing that resets the
+			  * timeout) are ignored during cal, so zeroing commands would just make the
+			  * joint go limp mid-cal. Hold the counter at 0 so MOTOR_MODE's timeout
+			  * starts counting when calibration hands over. */
+			 if (MOTOR_POSITION == MOTOR_POS_HIP) {
+				 hall_calibrate(fsmstate);
+			 } else {
+				 abad_hall_calibrate(fsmstate);
 			 }
-			 /* Otherwise, commutate */
-
-			 /* Calibrate Hall Sensor */
-			 hall_calibrate(fsmstate);
-
 			 torque_control(&controller);
 			 commutate(&controller, &comm_encoder);
-
-			 controller.timeout ++;
+			 controller.timeout = 0;
+			 break;
+		 case HALL_DEBUG_MODE:
+			 hall_debug_mode(fsmstate);
 			 break;
 	 }
 
@@ -143,13 +150,45 @@
 				GPIO_ENABLE;
 				break;
 			case HALL_CALIBRATE:
-				if (fsmstate->print_uart_msg){
-					printf("\r\nEntering Hall Calibration Mode\r\n");
+				if (MOTOR_POSITION == MOTOR_POS_HIP) {
+					if (fsmstate->print_uart_msg){
+						printf("\r\nEntering Hall Calibration Mode\r\n");
+					}
+					controller.kp = HALL_CAL_KP;
+					controller.ki = HALL_CAL_KI;
+					controller.kd = HALL_CAL_KD;
+					enter_motor_mode();
+					hall_cal_reset();
+					hall_cal.hall_cal_state = CODE_HALL_CALIBRATING;
+					can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
+					                    controller.i_q_filt*KT*GR, CODE_HALL_CALIBRATING, HALL_CALIBRATE);
+				} else {
+					if (fsmstate->print_uart_msg){
+						printf("\r\nEntering AB/AD Hall Calibration Mode\r\n");
+					}
+					controller.kp = ABAD_CAL_KP;
+					controller.ki = ABAD_CAL_KI;
+					controller.kd = ABAD_CAL_KD;
+					enter_motor_mode();
+					abad_cal_reset();
+					hall_cal.hall_cal_state = CODE_HALL_CALIBRATING;
+					printf("ABAD Hall Cal: starting\r\n");
+					can_send_cal_status(comm_encoder.angle_multiturn[0]/GR, comm_encoder.velocity/GR,
+					                    controller.i_q_filt*KT*GR, CODE_HALL_CALIBRATING, HALL_CALIBRATE);
 				}
-				controller.kp = HALL_CAL_KP;
-				controller.ki = HALL_CAL_KI;
-				controller.kd = HALL_CAL_KD;
-				enter_motor_mode();
+				break;
+			case HALL_DEBUG_MODE:
+				if (fsmstate->print_uart_msg){
+					printf("\r\nEntering Hall Debug Mode\r\n");
+					printf(" Move magnets manually; values are 1 = magnet detected.\r\n");
+					printf(" Press ESC to return to menu.\r\n");
+				}
+				hall_debug_started = 0;
+				zero_commands(&controller);
+				reset_foc(&controller);
+				drv_disable_gd(drv);
+				GPIO_DISABLE;
+				LED_LOW;
 				break;
 
 		}
@@ -207,9 +246,19 @@
 				if (fsmstate->print_uart_msg){
 					printf("\r\nExiting Hall Calibration Mode\r\n");
 				}
+				// Left mid-run (ESC / FC_RESET): don't keep reporting "calibrating".
+				if (hall_cal.hall_cal_state == CODE_HALL_CALIBRATING){
+					hall_cal.hall_cal_state = CODE_HALL_UNCALIBRATED;
+				}
 				GPIO_DISABLE;
 				LED_LOW;
 				drv_disable_gd(drv);
+				fsmstate->ready = 1;
+				break;
+			case HALL_DEBUG_MODE:
+				if (fsmstate->print_uart_msg){
+					printf("\r\nExiting Hall Debug Mode\r\n");
+				}
 				fsmstate->ready = 1;
 				break;
 		}
@@ -244,14 +293,29 @@
 					fsmstate->ready = 0;
 					break;
 				case SETUP_CMD:
+					printf("\r\n= = = = = Version Information = = = = =\r\n");
+					printf("\r\nFirmware Version:  %s\r\n", FIRMWARE_VERSION);
+					printf("\r\nBuild Date:  %s\r\n", FIRMWARE_DATE);
+					printf("Build Time:  %s\r\n", FIRMWARE_TIME);
+					printf("\r\nAuthor:  %s\r\n", AUTHOR_NAME);
+					printf("\r\nModification Info:  %s\r\n", MODIFICATION_INFO);
+					printf("\r\n= = = = = Program Started = = = = =\r\n");
 					fsmstate->next_state = SETUP_MODE;
 					fsmstate->ready = 0;
 					break;
 				case ZERO_CMD:
 					encoder_set_zero();
+					// The zero no longer comes from a hall calibration.
+					hall_cal.hall_cal_state = CODE_HALL_UNCALIBRATED;
 					break;
 				case HALL_CAL_CMD:
+					encoder_set_zero();
+					hall_cal.hall_cal_state = CODE_HALL_CALIBRATING;
 					fsmstate->next_state = HALL_CALIBRATE;
+					fsmstate->ready = 0;
+					break;
+				case HALL_DEBUG_CMD:
+					fsmstate->next_state = HALL_DEBUG_MODE;
 					fsmstate->ready = 0;
 					break;
 				default:
@@ -290,6 +354,8 @@
 	    printf(" Commands:\n\r");
 	    printf(" m - Motor Mode\n\r");
 	    printf(" c - Calibrate Encoder\n\r");
+	    printf(" h - Hall Calibration\n\r");
+	    printf(" q - Hall Sensor Debug\n\r");
 	    printf(" s - Setup\n\r");
 	    printf(" e - Display Encoder\n\r");
 	    printf(" z - Set Zero Position\n\r");
@@ -304,13 +370,14 @@
 	    printf("\r\n Motor:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "g", "Gear Ratio",                                "0",   "-",      GR);
 	    printf(" %-4s %-31s %-5s %-6s %.5f\n\r", "t", "Torque Constant (N-m/A)",                   "0",   "-",      KT);
+		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "P", "Motor Position (0=Hip, 1=AB/AD FL/RR, 2=AB/AD FR/RL)", "0", "2", MOTOR_POSITION);
 	    printf("\r\n Control:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "b", "Current Bandwidth (Hz)",                    "100", "2000",   I_BW);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "l", "Current Limit (A)",                         "0.0", "75.0",   I_MAX);
-	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "p", "Max Position Setpoint (rad)",               "-",   "-",      P_MAX);
-	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "v", "Max Velocity Setpoint (rad)/s",             "-",   "-",      V_MAX);
-	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "T", "Max Torque Setpoint (rad)/s",               "-",   "-",      T_MAX);
-	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "k", "Max Gain for Position (N-m/rad)",           "0.0", "1000.0", KP_MAX);
+	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "-", "CAN Position Range Max (rad)",              "fixed", "",     P_MAX);
+	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "-", "CAN Velocity Range (+/- rad/s)",            "fixed", "",     V_MAX);
+	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "-", "CAN Torque Range (+/- N-m)",                "fixed", "",     T_MAX);
+	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "k", "Max Gain for Position (N-m/rad)",           "0.0", "500.0",  KP_MAX);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "i", "Max Integral Gain for Position (N-m*s/rad)","0.0", "10.0",   KI_MAX);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "d", "Max Gain for Velocity (N-m/rad/s)",         "0.0", "5.0",    KD_MAX);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "X", "Motor Mode Default Kp (N-m/rad)",          "0.0", "1000.0", MOTOR_MODE_KP);
@@ -326,6 +393,10 @@
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "K", "Hall Calibration Kp (N-m/rad)",            "0.0", "1000.0", HALL_CAL_KP);
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "I", "Hall Calibration Ki (N-m*s/rad)",          "0.0", "10.0",   HALL_CAL_KI);
 		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "D", "Hall Calibration Kd (N-m/rad/s)",          "0.0", "5.0",    HALL_CAL_KD);
+		printf(" %-4s %-31s %-5s %-6s %.1f\n\r", "S", "AB/AD Calibration Speed",                  "0.0", "10.0",   ABAD_CAL_SPEED);
+		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "J", "AB/AD Calibration Kp (N-m/rad)",          "0.0", "1000.0", ABAD_CAL_KP);
+		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "U", "AB/AD Calibration Ki (N-m*s/rad)",        "0.0", "10.0",   ABAD_CAL_KI);
+		printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "V", "AB/AD Calibration Kd (N-m/rad/s)",        "0.0", "5.0",    ABAD_CAL_KD);
 	    printf("\r\n CAN:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %-5i\n\r", "n", "CAN ID",                                    "0",   "127",    CAN_ID);
 	    printf(" %-4s %-31s %-5s %-6s %-5i\n\r", "m", "CAN TX ID",                                 "0",   "127",    CAN_MASTER);
@@ -467,95 +538,46 @@
 	M_ZERO = zero_count;
 	ps_sample(&comm_encoder, DT);
 	controller.theta_mech = 0;
+	// Changing M_ZERO makes all buffered angle_multiturn entries inconsistent with the
+	// new zero frame. Flush the buffer so the velocity estimate starts at zero rather
+	// than producing a large spurious reading (and kd torque spike) for N_POS_SAMPLES cycles.
+	float cur_angle = comm_encoder.angle_multiturn[0];
+	for (int i = 1; i < N_POS_SAMPLES; i++) {
+		comm_encoder.angle_multiturn[i] = cur_angle;
+	}
+	comm_encoder.velocity = 0.0f;
  }
 
 
- void hall_calibrate(FSMStruct * fsmstate){
-     if(hall_cal.hall_cal_state == CODE_HALL_UNCALIBRATED || hall_cal.hall_cal_state >= CODE_HALL_CAL_SUCCESS );
-     else{
-    	 // read hall sensor
-    	 hall_cal.hall_input = HAL_GPIO_ReadPin(HALL_IO);
-    	 // calculate new position
-    	 if((HALL_CAL_DIR == 1 && controller.theta_mech >= hall_cal.hall_present_pos + 2*PI_F) || (HALL_CAL_DIR == -1 && controller.theta_mech <= hall_cal.hall_present_pos - 2*PI_F)){
-    		 hall_cal.hall_cal_state = CODE_HALL_CAL_FAIL ;
-    		 fsmstate->next_state = MENU_MODE ;
-    	 }
-         else{
-        	 // rotate the motor forward and backward to read the hall sensor (1: no magnet detected, 0: magnet detected)
-        	 // record the position at the moment from 1 to 0 (in_pos), and keep rotating
-        	 // record the position at the moment from 0 to 1 (out_pos), and stop rotating.
-        	 // calculate the average value of in_pos and out_pos, and rotate the motor to that position slowly
-        	 if(hall_cal.hall_input != hall_cal.hall_preinput ) {
-        		 hall_cal.hall_cal_count += 1 ;
-        		 if(hall_cal.hall_input == 0) hall_cal.hall_in_pos = controller.theta_mech ;
-        		 else{
-        			 hall_cal.hall_out_pos = controller.theta_mech ;
-        			 hall_cal.hall_mid_pos = (hall_cal.hall_in_pos + hall_cal.hall_out_pos)/2.0f ;
-                 }
-             }
-             if(hall_cal.hall_cal_count <= 1) hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd + HALL_CAL_DIR*(1.0f/(40000.0f)*HALL_CAL_SPEED ) ;
-             else{
-                 if(HALL_CAL_DIR == 1 ){
-                     if(HALL_CAL_OFFSET == 0){
-                    	 // keep turning
-                    	 if(controller.theta_mech >= hall_cal.hall_mid_pos) hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd - HALL_CAL_DIR*1.0f/40000.0f*HALL_CAL_SPEED ;
-                    	 else{
-                    		 // stop
-                    		 hall_cal.hall_cal_pcmd = 0.0f;
-                    		 hall_cal.hall_cal_state = CODE_HALL_CAL_SUCCESS; // success
-                             // zero
-                    		 hall_cal.hall_cal_count = 0 ;
-                    		 encoder_set_zero();
-                    		 fsmstate->next_state = MOTOR_MODE ;
-                         }
-                     }
-                     else{
-                         if(controller.theta_mech <= hall_cal.hall_mid_pos + HALL_CAL_OFFSET*PI_F/180)  hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd + HALL_CAL_DIR*1.0f/40000.0f*HALL_CAL_SPEED ;
-                         else{
-                        	 // stop
-                        	 hall_cal.hall_cal_pcmd = 0.0f;
-                        	 hall_cal.hall_cal_state = CODE_HALL_CAL_SUCCESS; // success
-                             // zero
-                             hall_cal.hall_cal_count = 0 ;
-                    		 encoder_set_zero();
-                    		 fsmstate->next_state = MOTOR_MODE ;
-                         }
-                     }
-                 }
-                 else if(HALL_CAL_DIR == -1){
-                     if(HALL_CAL_OFFSET == 0){
-                    	 // keep turning
-                         if(controller.theta_mech <= hall_cal.hall_mid_pos) hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd - HALL_CAL_DIR*1.0f/40000.0f*HALL_CAL_SPEED ;
-                         else{
-                        	 // stop
-                        	 hall_cal.hall_cal_pcmd = 0.0f;
-                        	 hall_cal.hall_cal_state = CODE_HALL_CAL_SUCCESS; // success
-                             // zero
-                             hall_cal.hall_cal_count = 0 ;
-                    		 encoder_set_zero();
-                    		 fsmstate->next_state = MOTOR_MODE ;
-                         }
-                     }
-                     else{
-                    	 // calibrate_offset != 0
-                         if(controller.theta_mech >= hall_cal.hall_mid_pos - HALL_CAL_OFFSET*PI_F/180)  hall_cal.hall_cal_pcmd = hall_cal.hall_cal_pcmd + HALL_CAL_DIR*1.0f/40000.0f*HALL_CAL_SPEED ;
-                         else{
-                        	 // stop
-                        	 hall_cal.hall_cal_pcmd = 0.0f;
-                        	 hall_cal.hall_cal_state = CODE_HALL_CAL_SUCCESS; // success
-                             // zero
-                             hall_cal.hall_cal_count = 0 ;
-                    		 encoder_set_zero();
-                    		 fsmstate->next_state = MOTOR_MODE ;
-                         }
-                     }
-                 }
-             }
-             hall_cal.hall_cal_pcmd = (hall_cal.hall_cal_pcmd>2*PI_F) ? hall_cal.hall_cal_pcmd-=2*PI_F : hall_cal.hall_cal_pcmd ;
-             hall_cal.hall_cal_pcmd = (hall_cal.hall_cal_pcmd < 0)  ? hall_cal.hall_cal_pcmd+=2*PI_F : hall_cal.hall_cal_pcmd ;
-             controller.p_des = hall_cal.hall_cal_pcmd ;
-         }
-         hall_cal.hall_preinput = hall_cal.hall_input ;
-     }
- }
+/* Prints 1 = magnet detected (the pins are active low). The encoder angle is read
+ * straight from the encoder, since controller.theta_mech is only updated while
+ * commutating and the motor is off in this mode. */
+void hall_debug_mode(FSMStruct * fsmstate){
+	(void)fsmstate;
+	static uint8_t prev_hip = 0;
+	static uint8_t prev_a = 0;
+	static uint8_t prev_b = 0;
+
+	uint8_t hip = (HAL_GPIO_ReadPin(HALL_IO) == 0);     // PC6
+	uint8_t hall_a = (HAL_GPIO_ReadPin(HALL_A_IO) == 0); // PB14
+	uint8_t hall_b = (HAL_GPIO_ReadPin(HALL_B_IO) == 0); // PB15
+	float enc_angle_deg = comm_encoder.angle_multiturn[0] / GR * 180.0f / PI_F;
+
+	if(!hall_debug_started){
+		hall_debug_started = 1;
+		prev_hip = hip;
+		prev_a = hall_a;
+		prev_b = hall_b;
+		printf("Hall Debug (1 = magnet): HIP=%d A=%d B=%d | ENC=%.2f deg\r\n",
+			hip, hall_a, hall_b, (double)enc_angle_deg);
+	}
+
+	if((hip != prev_hip) || (hall_a != prev_a) || (hall_b != prev_b)){
+		printf("Hall edge (1 = magnet): HIP %d->%d | A %d->%d | B %d->%d | ENC=%.2f deg\r\n",
+			prev_hip, hip, prev_a, hall_a, prev_b, hall_b, (double)enc_angle_deg);
+		prev_hip = hip;
+		prev_a = hall_a;
+		prev_b = hall_b;
+	}
+}
 
