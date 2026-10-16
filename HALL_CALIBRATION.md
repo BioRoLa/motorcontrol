@@ -6,7 +6,7 @@ How the joint finds its encoder zero from hall sensors. There are two routines, 
 - **Hip** (`hall_calibrate()`): one hall sensor, one magnet.
 - **AB/AD** (`abad_hall_calibrate()`): two hall sensors (A, B), four magnets.
 
-`MOTOR_POSITION` picks the routine: 0 = hip, 1 = AB/AD.
+`MOTOR_POSITION` picks the routine: 0 = hip, 1 = AB/AD front-left/rear-right (FL/RR), 2 = AB/AD front-right/rear-left (FR/RL).
 
 Contents:
 [Common](#common) ·
@@ -146,16 +146,21 @@ Going from A to B along the magnet arc is therefore +angle. Whether +angle is cl
 or counterclockwise isn't set in firmware; it depends on how the encoder chip reads the
 rotor. To find out, turn the output by hand in `q` or `e` mode and watch `ENC`.
 
-### Same on every leg
+### Which way is up: `MOTOR_POSITION` 1 vs 2
 
 Front AB/AD motors have the shaft pointing forward, rear ones backward. The hall board is
 on the motor housing and the magnets are on the output, so the whole layout turns with
-the motor. Turning the motor around, or moving it to the other side of the robot, changes
-which motor direction lifts the leg, but not where the inner magnets sit in motor angle.
-Calibration only needs the zone, not which way is "up", so it runs the same on every AB/AD
-leg, and `MOTOR_POSITION` = 1 for all of them.
+the motor: in motor angle the A/B pattern is the same on every leg. What differs is which
+motor direction lifts the leg. The sensors can't tell, so it comes from `MOTOR_POSITION`:
 
-On FL/RR legs the A side is **leg up**; on FR/RL legs it is **leg down**.
+| Leg | `MOTOR_POSITION` | Leg up | Sensor that pulses below the zone | Upper sensor on the board |
+|---|---|---|---|---|
+| FL, RR | 1 | −angle (A side) | B | B |
+| FR, RL | 2 | +angle (B side) | A | A |
+
+Checked on RR: raising the leg makes `ENC` go down. The board labels were checked on all
+four legs. The calibration only uses "up" to choose its first move; finding and centering
+the zone works the same either way.
 
 If a leg is ever built with the hall board rotated or A/B wired the other way round, the
 sides swap and calibration fails with "second wrong-side reversal". The
@@ -174,14 +179,13 @@ to the start of that run. Fill in the blanks from a `q` sweep.
 | **Zone** | 1 | 1 | **18.3° wide** (−30.8° to −49.1°), center −39.95° |
 | A-side edge sliver | 0 | **1** | ~3° |
 | A-side inner magnets | pulses | 0 | not yet logged |
-| Hard stop | | | ~40° past the zone on the leg-up side |
+| Hard stop | | | ~40° past the zone on the leg-up side; leg-down side: robot stand |
 
 The edge slivers exist because the two outer magnet windows don't line up exactly. They
-make a single active sensor at start ambiguous:
-
-- **A only**: either the B-side sliver (zone is next to us, toward the A side) or A on an
-  inner magnet out on the A side (zone is the other way).
-- **B only**: the same, mirrored.
+make a single active sensor at start ambiguous: A alone can mean the sliver next to the
+zone or an A inner magnet out on the A side, and the same for B. That's why the
+calibration doesn't pick a direction from the sensors; it always moves up first and
+reverses if it turns out to be above the zone.
 
 ### Sequence
 
@@ -189,17 +193,14 @@ All angles are relative to the start (the encoder is zeroed on entry). The ±85�
 limits (`ABAD_LIMIT_MIN/MAX_DEG`) are relative to the start too. `abad_cal_reset()`
 re-samples the encoder and clears all state first.
 
-**1. `FIND_FIRST`: pick a direction** from the sensors on the first cycle:
+**1. `FIND_FIRST`: move up.** The first move is always up, because moving down from an
+unknown start can drive the leg into the robot stand:
 
 | At start | Action |
 |---|---|
-| Both active | `BACKOUT`: move toward the B side until the zone clears, then sweep toward the A side |
-| A only | Sweep toward the A side |
-| B only | Sweep toward the B side |
-| Neither | Probe toward the A side up to `ABAD_PROBE_TRAVEL_DEG` (30°); once any sensor appears, keep going that way. Fail if nothing within 30°. |
-
-"A only → A side" is right in the sliver and wrong on an A-side inner magnet; step 2
-catches the wrong case.
+| Both active | `BACKOUT`: move up until the zone clears, then sweep down into it |
+| A or B active | Sweep up |
+| Neither | Probe up to `ABAD_PROBE_TRAVEL_DEG` (30°); once any sensor appears, keep going up. Fail if nothing within 30°. |
 
 **2. `FIND_ZERO`: sweep to the zone, reverse once if needed.** Sweep until A and B are
 both active: that position is the **forward trigger**.
@@ -230,18 +231,21 @@ it there, and wait until the joint has been within 1° of it, with both sensors 
 
 ### Expected paths
 
-| Start | Path |
-|---|---|
-| B side, on an inner magnet | toward B → B drops → reverse → zone |
-| B side, nothing active | probe toward A → B pulses on the way → sliver → zone |
-| B-side sliver (A only, just off center) | toward A → zone, no reversal |
-| In the zone | back out toward B → toward A → zone |
-| A-side sliver (B only) | toward B → zone |
-| A side, on an inner magnet | toward A → A drops → reverse → zone |
-| A side, nothing active | probe toward A → A appears → A drops → reverse → zone |
+| Start | Path | Lowest point |
+|---|---|---|
+| Below the zone (any sensors) | up → zone → cross → 8° over the top → back down to the top edge → center | The start: never below it |
+| In the zone | up until clear → down → zone → cross → 8° below the bottom edge → back up → center | 8° below the zone's bottom edge |
+| Just above the zone (down-side sensor alone) | up → upper sensor pulses on an inner magnet → reverse down → zone | 8° below the zone's bottom edge |
+| Above the zone (upper sensor on an inner magnet, or nothing) | up → upper sensor drops → reverse down → zone | 8° below the zone's bottom edge |
 
-The last row moves up to 30° further out on the A side before reversing. On FL/RR that's
-toward the leg-up hard stop (~40° past the zone), so don't start a cal far out on that side.
+So downward travel only starts once the zone is known to be below, and never goes lower
+than 8° under the zone (the leg's neutral range).
+
+**Don't start with the leg raised above center.** A start above the zone keeps moving up
+until the upper sensor passes an inner magnet. On the B side the first inner magnet ends
+about 27–37° past the zone (from the FL/RR logs), close to the ~40° leg-up hard stop on an
+FR/RL leg. Legs normally rest low, so this only matters if someone lifts a leg before
+calibrating.
 
 ### Log lines
 
@@ -256,12 +260,12 @@ Status line every 0.2 s and on every phase change:
 
 | Message | Meaning |
 |---|---|
-| `started on A only, sweeping toward A side` | Step 1, one sensor active at start |
-| `A found while probing, continuing toward A side` | Step 1, nothing was active at start |
-| `both sensors active, backing out toward B side before centering` | Started in the zone |
-| `cleared both-active zone, sweeping toward A side for center` | Backout finished |
+| `A active at start, sweeping up` | Step 1, one sensor active at start |
+| `A found while probing, sweeping up` | Step 1, nothing was active at start |
+| `both sensors active, backing out upward before centering` | Started in the zone |
+| `cleared both-active zone, sweeping down for center` | Backout finished |
 | `B inner-magnet transition 2` | Passed an inner-magnet edge on the way in |
-| `A dropped before zone, reversing toward B side` | Wrong-side rule fired |
+| `A dropped before zone, reversing down` | Wrong-side rule fired: started above the zone |
 | `forward both-active trigger at X deg, crossing zone to far edge` | First zone entry |
 | `far zone edge at X deg (zone ~W deg wide), overtraveling 8.00 deg` | Far edge; W should repeat run to run |
 | `overtravel complete, reversing for second trigger` | Turning back |
@@ -273,7 +277,7 @@ Failures (cal stops, joint holds position, back to `MENU_MODE`):
 | Message | Likely cause |
 |---|---|
 | `motor configured as HIP` | `MOTOR_POSITION` is 0 |
-| `no hall sensor detected within 30 deg` | Started far out on the A side with nothing active, or a dead sensor/wiring |
+| `no hall sensor detected within 30 deg` | Started far above the zone with nothing active, or a dead sensor/wiring |
 | `could not exit both-active zone within 30 deg` | A sensor stuck active |
 | `sensor pattern inconsistent (second wrong-side reversal)` | A and B sides swapped on this leg, or a flickering sensor |
 | `reached mechanical limit before both sensors active` | Never saw the zone in ±85°: dead sensor |
@@ -300,7 +304,7 @@ Compile-time, in `hall_calibration.h` / `hall_calibration.c`:
 
 ### AB/AD limits outside calibration
 
-The same ±85° limits also apply in normal operation: with `MOTOR_POSITION` = 1,
+The same ±85° limits also apply in normal operation: with `MOTOR_POSITION` = 1 or 2,
 `torque_control()` (`foc.c`) refuses a position command outside them. It zeros the
 current command and prints `Error: AB/AD command X deg outside mechanical limits`. The
 limits are measured from the encoder zero, so they only mean anything after a calibration.
@@ -312,16 +316,19 @@ state of all three hall inputs once on entry, then one line per edge with the en
 angle:
 
 ```
-Hall Debug init: PC6(HIP)=1 PB14(A)=1 PB15(B)=1 | active HIP=0 A=0 B=0 | ENC=0.00 deg
-Hall edge: PC6(HIP) 1->1 | PB14(A) 1->0 | PB15(B) 1->1 | ENC=-30.31 deg
+Hall Debug (1 = magnet): HIP=0 A=0 B=1 | ENC=-12.40 deg
+Hall edge (1 = magnet): HIP 0->0 | A 0->1 | B 1->1 | ENC=-30.31 deg
 ```
+
+Values are 1 when the sensor sees a magnet (the pins themselves are active low). `ENC` is
+read straight from the encoder, so it follows the joint while you move it by hand.
 
 `ESC` returns to the menu.
 
 ### Bring-up check
 
-1. Enter `q`. With no magnet over a sensor, raw values are `1 1 1` and active `0 0 0`.
-2. Move a magnet over each sensor in turn: raw goes `1 -> 0` and an edge line prints.
+1. Enter `q`. With no magnet over a sensor, all values are `0`.
+2. Move a magnet over each sensor in turn: it goes `0->1` and an edge line prints.
 3. Move the joint slowly through its full range and check the edges are where you expect.
    If no edges appear, calibration will fail.
 
@@ -334,8 +341,8 @@ edge. Check:
    If it's the other way round, swap `ABAD_A_SIDE_DIR` / `ABAD_B_SIDE_DIR`.
 2. Zone width and sliver widths in both directions (they differ by hysteresis).
 3. Distance from the zone to each hard stop.
-4. Which way is +angle: turn the output clockwise (looking from the motor body toward the
-   shaft) and see whether `ENC` goes up.
+4. Which way is up: raise the leg by hand. `ENC` should go down on FL/RR (checked on RR)
+   and up on FR/RL. If not, `MOTOR_POSITION` is wrong for this leg.
 
 Fill in the [sensor table](#what-the-sensors-read-by-position).
 
@@ -345,7 +352,7 @@ Fill in the [sensor table](#what-the-sensors-read-by-position).
 
 - One AB/AD module on the bench, leg free to swing, hand on the supply output.
 - UART terminal open (115200).
-- Check registers in setup mode (`s`): `MOTOR_POSITION` = 1;
+- Check registers in setup mode (`s`): `MOTOR_POSITION` = 1 (FL/RR) or 2 (FR/RL);
   `ABAD_CAL_SPEED` (default 0.25 rad/s); `ABAD_CAL_KP/KI/KD` (default 50 / 0 / 1.5).
 - Trigger with UART `h`, or over CAN from the host. Run every case over UART first, then
   repeat the passing ones over CAN once.
@@ -363,17 +370,17 @@ trigger, center target, final err, result code, time taken.
 
 | # | Start position | Expected path | Pass if |
 |---|---|---|---|
-| 1 | B side, nothing active (between inner magnets) | `A/B found while probing, continuing toward A side` → zone → CENTER_REV → CENTER_ZERO | SUCCESS, err well under 1° |
-| 2 | B side, on a B inner magnet (B only) | `started on B only, sweeping toward B side` → `B dropped before zone, reversing toward A side` → zone | SUCCESS, one reversal |
-| 3 | Just off center on the B side (A only, sliver) | `started on A only, sweeping toward A side` → zone | SUCCESS, **no reversal, no jiggle** |
-| 4 | Inside the zone, once on each side of center | `backing out toward B side` → `cleared both-active zone` → zone | SUCCESS |
-| 5 | Just off center on the A side (B only, sliver) | `started on B only, sweeping toward B side` → zone | SUCCESS, no reversal |
-| 6 | A side, on an A inner magnet (A only) | `started on A only` → `A dropped before zone, reversing toward B side` → zone | SUCCESS, one reversal |
-| 7 | A side, nothing active, within ~25° of the zone | probe toward A → `A found while probing` → `A dropped …, reversing` → zone | SUCCESS — **on FL/RR this probes toward the leg-up stop, keep a hand on the supply** |
+| 1 | Resting low, nothing active | `… found while probing, sweeping up` → zone → CENTER_REV → CENTER_ZERO | SUCCESS, err well under 1°, **never moves below the start** |
+| 2 | Resting low, on an inner magnet (lower sensor only) | `… active at start, sweeping up` → zone | SUCCESS, never moves below the start |
+| 3 | Just below center (upper sensor alone, sliver) | `… active at start, sweeping up` → zone | SUCCESS, no reversal, no jiggle |
+| 4 | Inside the zone, once on each side of center | `backing out upward` → `cleared both-active zone, sweeping down` → zone | SUCCESS; lowest point ~8° under the zone |
+| 5 | Just above center (lower sensor alone, sliver) | up → `… dropped before zone, reversing down` → zone | SUCCESS, one reversal |
+| 6 | Above the zone, upper sensor on an inner magnet | up → `… dropped before zone, reversing down` → zone | SUCCESS, one reversal — **moves up first, keep a hand on the supply** |
+| 7 | Above the zone, nothing active | probe up → upper sensor appears → drops → reverse down | SUCCESS — **closest to the leg-up hard stop, keep a hand on the supply** |
 | 8 | Repeat case 1 five times, same start | — | Spread of final position (read encoder after cal) ≤ 0.5° |
 | 9 | One start from each of cases 1–6 | — | Same physical zero each time (mark the leg); zone width repeats within 1–2° |
-| 10 | FR/RL module, cases 1, 3, 4, 6 | Same messages as FL/RR; the leg moves the mirrored way | SUCCESS. `second wrong-side reversal` means A/B sides are swapped on this leg |
-| 11 | Unplug sensor B, start on the B side | Zone never appears | FAIL `reached mechanical limit…` — **keep a hand on the supply** |
+| 10 | FR/RL module (`MOTOR_POSITION` = 2), cases 1, 3, 4, 6 | Same messages as FL/RR; the first move is up on this leg too | SUCCESS. `second wrong-side reversal` means A/B sides are swapped on this leg |
+| 11 | Unplug the upper sensor, start resting low | Zone never appears | FAIL `reached mechanical limit…` — **keep a hand on the supply** |
 | 12 | During case 1, the host sends CONTROL frames (or `cansend` FC 5 with kp=500) | Frames ignored during `HALL_CALIBRATE` | Cal completes normally; no jump in p_des/kp |
 | 13 | Hip module, `MOTOR_POSITION` = 0, `h` | Hip `hall_calibrate()` | Regression: still SUCCESS |
 
@@ -383,10 +390,10 @@ trigger, center target, final err, result code, time taken.
    the start, so FIND_ZERO can drive up to 85° before failing. With a dead sensor the leg
    can reach the hard stop first and push into it at `ABAD_CAL_KP` until the soft limit
    trips.
-2. **Probing with nothing active goes toward the A side** for up to 30°. On FL/RR that's
-   toward the leg-up hard stop (~40° past the zone).
-3. **Side assignment is assumed, not detected.** If a leg's A/B sides are swapped, cal
-   fails on the second reversal. Step 0 catches it.
+2. **Starting above the zone moves up first**, up to the first inner magnet past the zone
+   (or 30° when probing with nothing active), toward the leg-up hard stop.
+3. **Up direction comes from `MOTOR_POSITION`.** Set wrong, the first move goes down, toward
+   the stand. Check with step 0 (raise the leg, watch `ENC`).
 4. **The zero is only saved by the next config save** (see [Common](#common)). Confirm a
    power cycle without a config save loses it, and plan to re-cal after every power-up.
 
@@ -404,7 +411,7 @@ Set over UART in setup mode (`s`, then `<prefix><value><ENTER>`) or over CAN
 
 | Prefix | Register | Default | Range | Used by |
 |---|---|---|---|---|
-| `P` | `MOTOR_POSITION` | 0 | 0–1 | 0 = hip, 1 = AB/AD (any leg). A stored 2 (old FR/RL value) is converted to 1 at boot |
+| `P` | `MOTOR_POSITION` | 0 | 0–2 | 0 = hip, 1 = AB/AD FL/RR, 2 = AB/AD FR/RL (sets which way is up) |
 | `r` | `HALL_CAL_DIR` | 1 | −1 or 1 | Hip sweep direction |
 | `h` | `HALL_CAL_SPEED` | 0.25 rad/s | 0–10 | Hip sweep speed |
 | `e` | `HALL_CAL_OFFSET` | 0° | 0–143 | Hip: zero this far past the window center |
@@ -422,13 +429,23 @@ return read-only.
 
 ### 2026-10-16
 
-- **AB/AD directions in motor angle, same on every leg.** Start direction: A only → A
+- **AB/AD always moves up first.** Moving down from an unknown start could drive the leg
+  into the robot stand. Starts below the zone never go below the start; starts in or above
+  the zone go at most 8° below the zone's bottom edge. `MOTOR_POSITION` is 0 = hip, 1 =
+  FL/RR, 2 = FR/RL again: the sensors can't tell which way is up, so it has to be set.
+  **FR/RL boards flashed with any build since 438260e had their 2 converted to 1; set `P`
+  back to 2.**
+- **Hall debug mode (`q`)**: `ENC` now follows the joint (it was frozen at the last value
+  from motor/calibration mode), values print as 1 = magnet, and the start line prints on
+  every entry, not just the first.
+- **AB/AD directions in motor angle, same on every leg** (start-direction part superseded by
+  "always moves up first" above). Start direction: A only → A
   side, B only → B side, both → back out toward B, none → probe toward A. While sweeping
   toward a side, if that side's sensor pulses on and off before the zone, reverse once; a
   second reversal fails. Fixes the jiggle on near-center starts and the runaway on starts
   above center (`e17052a`).
-- **`MOTOR_POSITION` is now 0 = hip, 1 = AB/AD.** The FL/RR (1) vs FR/RL (2) split no longer
-  changes anything; a stored 2 is converted to 1 at boot, and the setup-menu range is 0–1.
+- (Briefly `MOTOR_POSITION` was reduced to 0/1 with a stored 2 converted to 1 at boot;
+  reverted above.)
 - **AB/AD zero accuracy.** `CENTER_ZERO` drives the command to the exact midpoint before
   counting settle; it used to zero up to 1° short on the approach side. Settle is 50 ms,
   timeout 10 s (`e17052a`).

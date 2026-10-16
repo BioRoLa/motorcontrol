@@ -19,11 +19,11 @@
 #include "calibration.h"
 
 /* Calibration phases */
-#define ABAD_CAL_PHASE_FIND_FIRST_SENSOR    0  // Pick a sweep direction from the sensors active at start (probe if none)
+#define ABAD_CAL_PHASE_FIND_FIRST_SENSOR    0  // Move up: probe if no sensor is active, back out if in the zone
 #define ABAD_CAL_PHASE_FIND_ZERO            1  // Sweep toward the both-active zone (reverses once if on the wrong side)
 #define ABAD_CAL_PHASE_CENTER_SAMPLE_REVERSE 2 // Reverse and sample both-active trigger in opposite direction
 #define ABAD_CAL_PHASE_CENTER_ZERO          3  // Move to midpoint of forward/reverse trigger samples
-#define ABAD_CAL_PHASE_BACKOUT              4  // Both sensors active on entry: back out toward the B side to a clean edge
+#define ABAD_CAL_PHASE_BACKOUT              4  // Both sensors active on entry: back out upward to a clean edge
 
 /* Mechanical limits for AB/AD joint */
 #define ABAD_LIMIT_MIN_DEG     -85.0f
@@ -35,15 +35,15 @@
 /* Motor-angle side of the zone where each sensor's inner magnets lie. The hall board and
  * magnets turn with the motor, so this is the same on every AB/AD leg (front and rear,
  * left and right). Measured on FL/RR legs: sensor B passes inner magnets toward +angle.
- * See HALL_CALIBRATION.md. */
+ * Which side is leg-up depends on the leg (MOTOR_POSITION): FL/RR up = A side,
+ * FR/RL up = B side. See HALL_CALIBRATION.md. */
 #define ABAD_A_SIDE_DIR   (-1)
 #define ABAD_B_SIDE_DIR   (+1)
 
 /* Simplified AB/AD calibration configuration.
- * Step 1: pick a direction from the sensors active at start:
- *   both active  -> back out toward the B side to a clean edge, then sweep toward A.
- *   A only       -> sweep toward the A side.   B only -> sweep toward the B side.
- *   neither      -> probe toward the A side (<= 30 deg) until a sensor appears, keep going.
+ * Step 1: always move up first (the leg can hit the robot stand going down):
+ *   both active  -> back out upward until the zone clears, then sweep down into it.
+ *   otherwise    -> sweep up (probing <= 30 deg if no sensor is active yet).
  *   While sweeping toward a side, if that side's sensor turns on and off before the zone
  *   (it only sees inner magnets on its own side), reverse once.
  * Step 2: center on the both-active zone.

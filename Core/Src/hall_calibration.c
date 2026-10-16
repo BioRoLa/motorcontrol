@@ -24,7 +24,8 @@ static void abad_cal_center_sample_reverse(FSMStruct * fsmstate);
 static void abad_cal_center_zero(FSMStruct * fsmstate);
 static void abad_cal_fail(FSMStruct * fsmstate, const char *message);
 static void abad_enter_find_zero(int dir, float joint_theta);
-static const char *abad_side_name(int dir);
+static int abad_up_dir(void);
+static const char *abad_dir_name(int dir);
 static const char *abad_phase_name(uint8_t phase);
 
 float abad_controller_to_joint_angle(float controller_angle){
@@ -182,7 +183,7 @@ void abad_cal_reset(void){
     abad_cal.inner_transition_count = 0;
 
     abad_cal_phase = ABAD_CAL_PHASE_FIND_FIRST_SENSOR;
-    abad_motion_dir = ABAD_A_SIDE_DIR;
+    abad_motion_dir = abad_up_dir();
     abad_phase_start_joint = start_joint;
     controller.p_des = abad_cal.abad_cal_pcmd;
     abad_last_logged_phase = 0xFF;
@@ -205,19 +206,16 @@ void abad_cal_reset(void){
 }
 
 /*
- * Pick the first sweep direction. Everything here is in motor angle, so the same logic
- * works on every AB/AD leg (normal and mirrored): the hall board and magnets turn with
- * the motor. Layout (see HALL_CALIBRATION.md): four magnets, the sensors span the
- * two outer ones, so the zone (both active) is unique. Off the zone, sensor A passes the
- * inner magnets on the A side (ABAD_A_SIDE_DIR) and sensor B passes the ones on the
- * B side. Right at the zone the outer magnet windows don't line up exactly, leaving a
- * sliver of A-only on the B-side edge and B-only on the A-side edge. So one active sensor
- * at start is ambiguous; assume the sliver (zone is adjacent) and let FIND_ZERO's
- * wrong-side rule reverse once if that was wrong:
- *   both active      -> BACKOUT toward the B side, then sweep back toward the A side.
- *   A only at start  -> toward A side (sliver: zone next; inner magnet: reversed later)
- *   B only at start  -> toward B side (same, mirrored)
- *   nothing at start -> probe toward the A side; keep going that way once a sensor appears.
+ * First move: always up, since moving down from an unknown start can drive the leg into
+ * the robot stand. Layout (see HALL_CALIBRATION.md): four magnets, the sensors span the
+ * two outer ones, so the zone (both active) is unique; each sensor passes the inner
+ * magnets on its own side of the zone only (A: ABAD_A_SIDE_DIR, B: ABAD_B_SIDE_DIR).
+ *   both active      -> BACKOUT up until the zone clears, then sweep down into it.
+ *   one active       -> sweep up.
+ *   nothing active   -> probe up (<= ABAD_PROBE_TRAVEL_DEG); once a sensor appears, keep going.
+ * Starting above the zone, the upper sensor pulses on an inner magnet and FIND_ZERO's
+ * wrong-side rule turns the sweep down; downward travel only happens once the zone is
+ * known to be below.
  */
 static void abad_cal_find_first_sensor(FSMStruct * fsmstate) {
     float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
@@ -226,27 +224,21 @@ static void abad_cal_find_first_sensor(FSMStruct * fsmstate) {
     uint8_t hall_b_active = abad_sensor_b_active();
     uint8_t both_active = (hall_a_active && hall_b_active);
     uint8_t first_cycle = abad_first_cycle;
+    int up_dir = abad_up_dir();
     abad_first_cycle = 0;
 
     if (both_active) {
-        abad_motion_dir = ABAD_B_SIDE_DIR;
+        abad_motion_dir = up_dir;
         abad_cal_phase = ABAD_CAL_PHASE_BACKOUT;
         abad_phase_start_joint = joint_theta;
-        printf("AB/AD Cal: both sensors active, backing out toward B side before centering\r\n");
+        printf("AB/AD Cal: both sensors active, backing out upward before centering\r\n");
         return;
     }
 
     if (hall_a_active || hall_b_active) {
-        const char *name = hall_a_active ? "A" : "B";
-        if (!first_cycle) {
-            // Found while probing from an all-off start: keep going the same way.
-            printf("AB/AD Cal: %s found while probing, continuing toward A side\r\n", name);
-            abad_enter_find_zero(ABAD_A_SIDE_DIR, joint_theta);
-        } else {
-            int dir = hall_a_active ? ABAD_A_SIDE_DIR : ABAD_B_SIDE_DIR;
-            printf("AB/AD Cal: started on %s only, sweeping toward %s\r\n", name, abad_side_name(dir));
-            abad_enter_find_zero(dir, joint_theta);
-        }
+        printf("AB/AD Cal: %s %s, sweeping up\r\n", hall_a_active ? "A" : "B",
+               first_cycle ? "active at start" : "found while probing");
+        abad_enter_find_zero(up_dir, joint_theta);
         return;
     }
 
@@ -257,7 +249,7 @@ static void abad_cal_find_first_sensor(FSMStruct * fsmstate) {
 
     float step = ABAD_CAL_SPEED * DT;
     float joint_pcmd = abad_controller_to_joint_angle(abad_cal.abad_cal_pcmd);
-    joint_pcmd += ABAD_A_SIDE_DIR * step;
+    joint_pcmd += up_dir * step;
     joint_pcmd = abad_clamp_joint_angle(joint_pcmd);
     abad_cal.abad_cal_pcmd = abad_joint_to_controller_angle(joint_pcmd);
     controller.p_des = abad_cal.abad_cal_pcmd;
@@ -275,9 +267,9 @@ static void abad_enter_find_zero(int dir, float joint_theta) {
 }
 
 /*
- * Both sensors were active on entry. Move toward the B side until the both-active zone
- * is cleared, then sweep back toward the A side so FIND_ZERO records a clean zone entry
- * as its forward trigger.
+ * Both sensors were active on entry. Move up until the both-active zone is cleared, then
+ * sweep back down so FIND_ZERO records a clean zone entry (from above) as its forward
+ * trigger.
  */
 static void abad_cal_backout(FSMStruct * fsmstate) {
     float joint_theta = abad_controller_to_joint_angle(controller.theta_mech);
@@ -285,8 +277,8 @@ static void abad_cal_backout(FSMStruct * fsmstate) {
     uint8_t both_active = abad_sensor_a_active() && abad_sensor_b_active();
 
     if (!both_active) {
-        abad_enter_find_zero(ABAD_A_SIDE_DIR, joint_theta);
-        printf("AB/AD Cal: cleared both-active zone, sweeping toward A side for center\r\n");
+        abad_enter_find_zero(-abad_up_dir(), joint_theta);
+        printf("AB/AD Cal: cleared both-active zone, sweeping down for center\r\n");
         return;
     }
 
@@ -354,8 +346,8 @@ static void abad_cal_find_zero(FSMStruct * fsmstate) {
             abad_watch_armed = 0;
             abad_watch_off = 0;
             abad_find_zero_reversed = 1;
-            printf("AB/AD Cal: %s dropped before zone, reversing toward %s\r\n",
-                   toward_a ? "A" : "B", abad_side_name(abad_motion_dir));
+            printf("AB/AD Cal: %s dropped before zone, reversing %s\r\n",
+                   toward_a ? "A" : "B", abad_dir_name(abad_motion_dir));
         }
     }
 
@@ -497,8 +489,14 @@ static void abad_cal_fail(FSMStruct * fsmstate, const char *message) {
                         controller.i_q_filt*KT*GR, CODE_HALL_CAL_FAIL, MENU_MODE);
 }
 
-static const char *abad_side_name(int dir) {
-    return (dir == ABAD_A_SIDE_DIR) ? "A side" : "B side";
+/* Motor direction that lifts the leg. The sensors can't tell (the layout is the same in
+ * motor angle on every leg), so it comes from MOTOR_POSITION. */
+static int abad_up_dir(void) {
+    return (MOTOR_POSITION == MOTOR_POS_ABAD_FRRL) ? ABAD_B_SIDE_DIR : ABAD_A_SIDE_DIR;
+}
+
+static const char *abad_dir_name(int dir) {
+    return (dir == abad_up_dir()) ? "up" : "down";
 }
 
 static const char *abad_phase_name(uint8_t phase) {

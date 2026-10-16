@@ -15,7 +15,7 @@ This repo targets STM32CubeIDE-generated projects and is designed for practical 
 1. Build and flash with STM32CubeIDE.
 2. Open a UART terminal and confirm the menu prints.
 3. Enter setup mode (`s`) and verify key parameters (current limits, gains, CAN IDs).
-4. Set `MOTOR_POSITION` (`P`) and run hall calibration with `h` ([HALL_CALIBRATION.md](HALL_CALIBRATION.md)).
+4. Set `MOTOR_POSITION` (`P`: 0 = hip, 1 = AB/AD FL/RR, 2 = AB/AD FR/RL) and run hall calibration with `h` ([HALL_CALIBRATION.md](HALL_CALIBRATION.md)).
 5. Enter motor mode (`m`) and begin command testing.
 
 ## Hardware + Toolchain
@@ -130,7 +130,7 @@ Most-used writable prefixes exposed in `enter_setup_state` and `user_config.h`:
 - `f`: field-weakening current limit (`I_FW_MAX`)
 - `c`: continuous current limit (`I_MAX_CONT`)
 - `a`: calibration current (`I_CAL`)
-- `P`: motor role (`MOTOR_POSITION`: 0 = hip, 1 = AB/AD)
+- `P`: motor role (`MOTOR_POSITION`: 0 = hip, 1 = AB/AD FL/RR, 2 = AB/AD FR/RL)
 - hall calibration registers (`r`, `e`, `h`, `K`, `I`, `D`, `S`, `J`, `U`, `V`): see [HALL_CALIBRATION.md](HALL_CALIBRATION.md#registers)
 - `n`: CAN node ID (`CAN_ID`)
 - `m`: CAN master ID (`CAN_MASTER`)
@@ -158,7 +158,7 @@ The table below lists all register prefixes that are writable over UART (`CMD_* 
 | `n`    | `CAN_ID`          | int   | CAN node ID                                          |
 | `m`    | `CAN_MASTER`      | int   | CAN master/controller ID                             |
 | `o`    | `CAN_TIMEOUT`     | int   | CAN timeout cycles                                   |
-| `P`    | `MOTOR_POSITION`  | int   | Motor role (`0=HIP, 1=AB/AD`)                        |
+| `P`    | `MOTOR_POSITION`  | int   | Motor role (`0=HIP, 1=AB/AD FL/RR, 2=AB/AD FR/RL`)   |
 | `t`    | `KT`              | float | Torque constant                                      |
 | `X`    | `MOTOR_MODE_KP`   | float | Default motor-mode proportional gain                 |
 | `Y`    | `MOTOR_MODE_KI`   | float | Default motor-mode integral gain                     |
@@ -234,7 +234,7 @@ On boot, `main.c` sanitizes register values to safe defaults if flash contains i
 - Register writes are range-validated through config update helpers.
 - Invalid configuration commands return explicit status/error codes.
 - Position-loop integrator is clamped so `ki * error` stays within the commandable torque, and reset while `ki == 0`.
-- AB/AD joints (`MOTOR_POSITION` = 1) refuse position commands outside ±85° of the calibrated zero ([HALL_CALIBRATION.md](HALL_CALIBRATION.md#abad-limits-outside-calibration)).
+- AB/AD joints (`MOTOR_POSITION` 1 or 2) refuse position commands outside ±85° of the calibrated zero ([HALL_CALIBRATION.md](HALL_CALIBRATION.md#abad-limits-outside-calibration)).
 
 ## Adapting to new hardware
 

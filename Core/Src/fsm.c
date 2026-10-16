@@ -20,6 +20,8 @@
 #include "hall_calibration.h"
 #include "version_info.h"
 
+static uint8_t hall_debug_started = 0;   // cleared on entering HALL_DEBUG_MODE
+
  void run_fsm(FSMStruct * fsmstate){
 	 /* run_fsm is run every commutation interrupt cycle */
 
@@ -178,9 +180,10 @@
 			case HALL_DEBUG_MODE:
 				if (fsmstate->print_uart_msg){
 					printf("\r\nEntering Hall Debug Mode\r\n");
-					printf(" Move magnets manually and observe raw/active values below.\r\n");
+					printf(" Move magnets manually; values are 1 = magnet detected.\r\n");
 					printf(" Press ESC to return to menu.\r\n");
 				}
+				hall_debug_started = 0;
 				zero_commands(&controller);
 				reset_foc(&controller);
 				drv_disable_gd(drv);
@@ -367,7 +370,7 @@
 	    printf("\r\n Motor:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "g", "Gear Ratio",                                "0",   "-",      GR);
 	    printf(" %-4s %-31s %-5s %-6s %.5f\n\r", "t", "Torque Constant (N-m/A)",                   "0",   "-",      KT);
-		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "P", "Motor Position (0=Hip, 1=AB/AD)",          "0",   "1",      MOTOR_POSITION);
+		printf(" %-4s %-31s %-5s %-6s %d\n\r",   "P", "Motor Position (0=Hip, 1=AB/AD FL/RR, 2=AB/AD FR/RL)", "0", "2", MOTOR_POSITION);
 	    printf("\r\n Control:\r\n");
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "b", "Current Bandwidth (Hz)",                    "100", "2000",   I_BW);
 	    printf(" %-4s %-31s %-5s %-6s %.3f\n\r", "l", "Current Limit (A)",                         "0.0", "75.0",   I_MAX);
@@ -546,35 +549,35 @@
  }
 
 
+/* Prints 1 = magnet detected (the pins are active low). The encoder angle is read
+ * straight from the encoder, since controller.theta_mech is only updated while
+ * commutating and the motor is off in this mode. */
 void hall_debug_mode(FSMStruct * fsmstate){
 	(void)fsmstate;
-	static uint8_t init = 0;
-	static uint8_t prev_hip = 1;
-	static uint8_t prev_a = 1;
-	static uint8_t prev_b = 1;
+	static uint8_t prev_hip = 0;
+	static uint8_t prev_a = 0;
+	static uint8_t prev_b = 0;
 
-	uint8_t hip_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_IO);      // PC6
-	uint8_t hall_a_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_A_IO); // PB14
-	uint8_t hall_b_raw = (uint8_t)HAL_GPIO_ReadPin(HALL_B_IO); // PB15
-	float enc_angle_deg = controller.theta_mech * 180.0f / PI_F;
+	uint8_t hip = (HAL_GPIO_ReadPin(HALL_IO) == 0);     // PC6
+	uint8_t hall_a = (HAL_GPIO_ReadPin(HALL_A_IO) == 0); // PB14
+	uint8_t hall_b = (HAL_GPIO_ReadPin(HALL_B_IO) == 0); // PB15
+	float enc_angle_deg = comm_encoder.angle_multiturn[0] / GR * 180.0f / PI_F;
 
-	if(!init){
-		prev_hip = hip_raw;
-		prev_a = hall_a_raw;
-		prev_b = hall_b_raw;
-		init = 1;
-		printf("Hall Debug init: PC6(HIP)=%d PB14(A)=%d PB15(B)=%d | active HIP=%d A=%d B=%d | ENC=%.2f deg\r\n",
-			hip_raw, hall_a_raw, hall_b_raw,
-			(hip_raw == 0), (hall_a_raw == 0), (hall_b_raw == 0),
-			(double)enc_angle_deg);
+	if(!hall_debug_started){
+		hall_debug_started = 1;
+		prev_hip = hip;
+		prev_a = hall_a;
+		prev_b = hall_b;
+		printf("Hall Debug (1 = magnet): HIP=%d A=%d B=%d | ENC=%.2f deg\r\n",
+			hip, hall_a, hall_b, (double)enc_angle_deg);
 	}
 
-	if((hip_raw != prev_hip) || (hall_a_raw != prev_a) || (hall_b_raw != prev_b)){
-		printf("Hall edge: PC6(HIP) %d->%d | PB14(A) %d->%d | PB15(B) %d->%d | ENC=%.2f deg\r\n",
-			prev_hip, hip_raw, prev_a, hall_a_raw, prev_b, hall_b_raw, (double)enc_angle_deg);
-		prev_hip = hip_raw;
-		prev_a = hall_a_raw;
-		prev_b = hall_b_raw;
+	if((hip != prev_hip) || (hall_a != prev_a) || (hall_b != prev_b)){
+		printf("Hall edge (1 = magnet): HIP %d->%d | A %d->%d | B %d->%d | ENC=%.2f deg\r\n",
+			prev_hip, hip, prev_a, hall_a, prev_b, hall_b, (double)enc_angle_deg);
+		prev_hip = hip;
+		prev_a = hall_a;
+		prev_b = hall_b;
 	}
 }
 

@@ -195,7 +195,6 @@ int main(void)
   if(isnan(R_NOMINAL)       || MIN_R_NOMINAL > R_NOMINAL             || MAX_R_NOMINAL < R_NOMINAL)             {R_NOMINAL = 0.0f;}
   if(isnan(TEMP_MAX)        || MIN_TEMP_MAX > TEMP_MAX               || MAX_TEMP_MAX < TEMP_MAX)               {TEMP_MAX = 125.0f;}
   if(isnan(PPAIRS)          || MIN_PPAIRS > PPAIRS                   || MAX_PPAIRS < PPAIRS)                   {PPAIRS = 21.0f;}
-  if(MOTOR_POSITION == 2)                                                                                                  {MOTOR_POSITION = MOTOR_POS_ABAD;}	// old AB/AD FR/RL value
   if(                          MIN_MOTOR_POSITION > MOTOR_POSITION   || MAX_MOTOR_POSITION < MOTOR_POSITION)   {MOTOR_POSITION = MOTOR_POS_HIP;}
 
   user_config_initialize();

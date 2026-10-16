@@ -353,12 +353,13 @@ extern "C" {
 #define ADDR_MOTOR_POSITION     136
 #define CMD_MOTOR_POSITION     	'P'
 #define MIN_MOTOR_POSITION     	0
-#define MAX_MOTOR_POSITION     	1
+#define MAX_MOTOR_POSITION     	2
 
-/* Motor role. AB/AD used to be split into 1 = FL/RR and 2 = FR/RL; nothing depends on the
- * leg side any more, and a stored 2 is converted to 1 at boot (main.c). */
+/* Motor role. For AB/AD the value only says which motor direction lifts the leg (the hall
+ * layout is the same on every leg in motor angle); calibration always moves up first. */
 #define MOTOR_POS_HIP             0  // Hip flexion/extension
-#define MOTOR_POS_ABAD            1  // AB/AD, any leg
+#define MOTOR_POS_ABAD_FLRR       1  // AB/AD front-left / rear-right: leg up = -angle (checked on RR)
+#define MOTOR_POS_ABAD_FRRL       2  // AB/AD front-right / rear-left: leg up = +angle
 
 
 #define PHASE_ORDER             __int_reg[ADDR_PHASE_ORDER]         // Phase swapping during calibration
@@ -369,7 +370,7 @@ extern "C" {
 #define E_ZERO					__int_reg[ADDR_E_ZERO]
 #define HALL_CAL_DIR            __int_reg[ADDR_HALL_CAL_DIR]
 #define ENCODER_LUT             __int_reg[ADDR_ENCODER_LUT]         // Encoder offset LUT spans int regs [8..135]
-#define MOTOR_POSITION          __int_reg[ADDR_MOTOR_POSITION]      // Motor role (MOTOR_POS_HIP, MOTOR_POS_ABAD)
+#define MOTOR_POSITION          __int_reg[ADDR_MOTOR_POSITION]      // Motor role (MOTOR_POS_HIP, MOTOR_POS_ABAD_FLRR, MOTOR_POS_ABAD_FRRL)
 
 
 #define STR_INVALID_VALUE		"Not a valid value\r\n"
